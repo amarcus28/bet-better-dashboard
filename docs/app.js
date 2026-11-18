@@ -815,7 +815,7 @@
   function showError(message) {
     els.banner.hidden = false;
     els.banner.textContent = message;
-    els.snapshot.textContent = "Snapshot unavailable";
+    els.snapshot.textContent = "Bets unavailable";
   }
 
   function toDashboardBet(row) {
