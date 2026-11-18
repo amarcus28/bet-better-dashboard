@@ -51,7 +51,7 @@
   function placeOddsTip(target) {
     const discord = target.dataset.discord;
     if (!discord) return;
-    oddsTip.textContent = `Discord ${discord}`;
+    oddsTip.textContent = target.dataset.warn ? `Discord ${discord} · over 10% off` : `Discord ${discord}`;
     oddsTip.hidden = false;
     const rect = target.getBoundingClientRect();
     const tipRect = oddsTip.getBoundingClientRect();
@@ -102,6 +102,31 @@
     const numeric = Number(text);
     if (Number.isFinite(numeric) && numeric > 0 && !text.startsWith("+")) return `+${text}`;
     return text;
+  }
+
+  // American prices: +100 and -100 are the same even-money point, and the
+  // scale runs outward from there. Nothing valid sits between -99 and 99.
+  const ODDS_GAP = 0.1;
+
+  function payoutPerUnit(value) {
+    const odds = Number(String(value ?? "").trim());
+    if (!Number.isFinite(odds) || (odds > -100 && odds < 100)) return null;
+    if (odds >= 100) return odds / 100;
+    return 100 / Math.abs(odds);
+  }
+
+  function oddsDiffer(display, discord) {
+    const betPayout = payoutPerUnit(display);
+    const discordPayout = payoutPerUnit(discord);
+    if (betPayout == null || discordPayout == null || betPayout === 0) return false;
+    return Math.abs(betPayout - discordPayout) / betPayout > ODDS_GAP;
+  }
+
+  function oddsWarnIcon() {
+    const icon = el("span", "odds-warn");
+    icon.setAttribute("aria-hidden", "true");
+    icon.innerHTML = "<svg viewBox='0 0 16 16' width='14' height='14'><path fill='currentColor' d='M8 1.4 15.2 14.6H.8L8 1.4z'/><path fill='#101410' d='M7.25 6.1h1.5v4.2h-1.5zm0 5.1h1.5v1.5h-1.5z'/></svg>";
+    return icon;
   }
 
   function stakeOf(bet) {
@@ -577,10 +602,20 @@
       return cell;
     }
     const discord = formatOdds(discordRaw);
+    const warn = oddsDiffer(bet.odds, discordRaw);
     const trigger = el("span", "odds-hover", display);
     trigger.tabIndex = 0;
     trigger.dataset.discord = discord;
-    trigger.setAttribute("aria-label", `Bet odds ${display}, Discord odds ${discord}`);
+    if (warn) {
+      trigger.dataset.warn = "1";
+      trigger.append(oddsWarnIcon());
+    }
+    trigger.setAttribute(
+      "aria-label",
+      warn
+        ? `Bet odds ${display}, Discord odds ${discord}, more than 10% apart`
+        : `Bet odds ${display}, Discord odds ${discord}`,
+    );
     cell.append(trigger);
     return cell;
   }
