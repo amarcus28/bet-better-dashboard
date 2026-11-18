@@ -2,6 +2,9 @@
   const BOOK_ORDER = ["ProphetX", "Kalshi", "Novig", "Polymarket"];
   const SETTLED = new Set(["won", "lost", "push", "void"]);
   const PAGE = 60;
+  const SUPABASE_URL = "https://pygnirbppsekiwzwtdvj.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_uYrKVr0Ex6Ttva21StRkDA_wthWhuzs";
+  const FETCH_PAGE = 1000;
   // American prices: +100 and -100 are the same even-money point, and the
   // scale runs outward from there. Nothing valid sits between -99 and 99.
   const ODDS_GAP = 0.05;
@@ -693,7 +696,7 @@
     const rows = state.data.bovada || [];
     if (!rows.length) {
       els.bovadaKpis.replaceChildren();
-      els.bovadaRoot.replaceChildren(el("p", "muted", "No Bovada rows in this snapshot."));
+      els.bovadaRoot.replaceChildren(el("p", "muted", "Bovada picks are not in the database."));
       return;
     }
     const evs = rows.map((row) => num(row.ev_pct)).filter((value) => value != null);
@@ -815,24 +818,61 @@
     els.snapshot.textContent = "Snapshot unavailable";
   }
 
+  function toDashboardBet(row) {
+    return {
+      placed_at: row.placed_at,
+      book: row.book || "",
+      tournament: row.tournament,
+      matchup: row.matchup,
+      market: row.market,
+      bet: row.bet,
+      selection: row.selection,
+      ev_pct: row.ev_pct,
+      odds: row.display_odds == null ? row.discord_odds : row.display_odds,
+      discord_odds: row.discord_odds,
+      matched_stake: row.matched_stake,
+      outcome: row.outcome,
+      profit: row.profit,
+    };
+  }
+
+  async function loadBets() {
+    const rows = [];
+    let offset = 0;
+    const select = "placed_at,book,tournament,matchup,market,bet,selection,ev_pct,display_odds,discord_odds,matched_stake,outcome,profit";
+    while (true) {
+      const response = await fetch(
+        `${SUPABASE_URL}/rest/v1/dashboard_bets?select=${select}&order=id.asc`,
+        {
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+            Range: `${offset}-${offset + FETCH_PAGE - 1}`,
+          },
+        },
+      );
+      if (!response.ok) throw new Error(String(response.status));
+      const page = await response.json();
+      for (const row of page) rows.push(toDashboardBet(row));
+      if (page.length < FETCH_PAGE) return rows;
+      offset += FETCH_PAGE;
+    }
+  }
+
   async function init() {
-    let response;
+    let bets;
     try {
-      response = await fetch("./data/bets.json");
+      bets = await loadBets();
     } catch (error) {
-      showError("Could not load data/bets.json. Serve this folder over http, or push the snapshot to GitHub Pages.");
+      showError("Could not load bets from Supabase.");
       return;
     }
-    if (!response.ok) {
-      showError(`Could not load data/bets.json (${response.status}).`);
-      return;
-    }
-    state.data = await response.json();
-    const when = state.data.exported_at
-      ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(state.data.exported_at))
-      : "unknown time";
-    const count = (state.data.bets || []).length;
-    els.snapshot.textContent = `${count.toLocaleString()} bets · exported ${when}`;
+    const latest = bets.reduce((max, bet) => (bet.placed_at > max ? bet.placed_at : max), "");
+    state.data = { bets, bovada: [] };
+    const when = latest
+      ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(latest))
+      : "no bets yet";
+    els.snapshot.textContent = `${bets.length.toLocaleString()} bets · latest ${when}`;
     readUrl();
     fillFilters();
     if ([...els.league.options].some((option) => option.value === state.league)) els.league.value = state.league;

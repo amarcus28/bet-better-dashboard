@@ -1,31 +1,19 @@
 # Bet Better results
 
 Static dashboard for placed-bet results. The betting bot stays in its private
-repository. This repo only has a snapshot of the results sheet, published with
-GitHub Pages from `docs/`.
+repository and writes each placed bet to Supabase. This site reads that
+database in the browser. GitHub Pages serves the page from `docs/`.
 
-The page rebuilds the spreadsheet pivots in the browser:
+The page rebuilds the pivots in the browser:
 
 - profit, stake, ROI, and record
 - league × book, market × book, and month × book
 - the bet log
-- the separate Bovada pick list
 
-There is no live link to the spreadsheet.
+There is no live link to the spreadsheet. Order ids are not readable from
+this page. Bovada picks are not in the database yet.
 
 Site: https://amarcus28.github.io/bet-better-dashboard/
-
-## Refresh the numbers
-
-From the private bot repo, with `src/user_info.json` and `src/credentials.json`
-in place:
-
-```sh
-python scripts/export_dashboard.py
-```
-
-That writes `docs/data/bets.json` in this repo. Commit and push to update the
-site.
 
 ## Local preview
 
