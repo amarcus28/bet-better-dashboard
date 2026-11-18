@@ -1,0 +1,717 @@
+(() => {
+  const BOOK_ORDER = ["ProphetX", "Kalshi", "Novig", "Polymarket"];
+  const SETTLED = new Set(["won", "lost", "push", "void"]);
+  const PAGE = 60;
+
+  const state = {
+    data: null,
+    book: "",
+    league: "",
+    market: "",
+    from: "",
+    to: "",
+    settled: false,
+    view: "league",
+    sort: { key: "total", dir: "desc" },
+    betLimit: PAGE,
+    chartPoints: [],
+  };
+
+  const moneyFormat = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  });
+
+  const els = {
+    snapshot: document.querySelector("#snapshot"),
+    banner: document.querySelector("#banner"),
+    books: document.querySelector("#books"),
+    league: document.querySelector("#league"),
+    market: document.querySelector("#market"),
+    from: document.querySelector("#from"),
+    to: document.querySelector("#to"),
+    settled: document.querySelector("#settled"),
+    clear: document.querySelector("#clear"),
+    kpis: document.querySelector("#kpis"),
+    readout: document.querySelector("#chart-readout"),
+    canvas: document.querySelector("#pnl-chart"),
+    views: document.querySelector("#views"),
+    tableMeta: document.querySelector("#table-meta"),
+    tableRoot: document.querySelector("#table-root"),
+    bovadaKpis: document.querySelector("#bovada-kpis"),
+    bovadaRoot: document.querySelector("#bovada-root"),
+  };
+
+  function num(value) {
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  }
+
+  function money(value) {
+    if (value == null || Number.isNaN(value)) return "—";
+    return moneyFormat.format(value);
+  }
+
+  function ratio(value) {
+    if (value == null || Number.isNaN(value)) return "—";
+    return `${(value * 100).toFixed(1)}%`;
+  }
+
+  function points(value) {
+    if (value == null || Number.isNaN(value)) return "—";
+    return `${value.toFixed(1)}%`;
+  }
+
+  function tone(value) {
+    if (value == null || Math.abs(value) < 0.005) return "flat";
+    return value > 0 ? "pos" : "neg";
+  }
+
+  function stakeOf(bet) {
+    const matched = num(bet.matched_stake);
+    return matched == null ? 0 : matched;
+  }
+
+  function profitOf(bet) {
+    const profit = num(bet.profit);
+    return profit == null ? 0 : profit;
+  }
+
+  function isSettled(bet) {
+    return SETTLED.has(String(bet.outcome || "").toLowerCase());
+  }
+
+  function labelForBet(bet) {
+    const selection = String(bet.selection || "").trim();
+    const alert = String(bet.bet || "").trim();
+    if (selection && !/^[a-z0-9-]+$/i.test(selection)) return selection;
+    return alert || selection || "—";
+  }
+
+  function dayOf(bet) {
+    return String(bet.placed_at || "").slice(0, 10);
+  }
+
+  function monthOf(bet) {
+    const month = String(bet.placed_at || "").slice(0, 7);
+    return month || "—";
+  }
+
+  function formatDay(iso) {
+    if (!iso) return "—";
+    const [year, month, day] = iso.slice(0, 10).split("-");
+    if (!year || !month || !day) return iso;
+    const names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `${Number(day)} ${names[Number(month) - 1] || month} ${year}`;
+  }
+
+  function formatMonth(key) {
+    if (!/^\d{4}-\d{2}$/.test(key)) return key;
+    return formatDay(`${key}-01`).slice(3);
+  }
+
+  function booksIn(bets) {
+    const present = new Set(bets.map((bet) => bet.book).filter(Boolean));
+    const ordered = BOOK_ORDER.filter((book) => present.has(book));
+    const extras = [...present].filter((book) => !BOOK_ORDER.includes(book)).sort();
+    return ordered.concat(extras);
+  }
+
+  function summarize(bets) {
+    const summary = {
+      count: bets.length,
+      settled: 0,
+      won: 0,
+      lost: 0,
+      push: 0,
+      voided: 0,
+      pending: 0,
+      staked: 0,
+      profit: 0,
+      evStake: 0,
+      evWeighted: 0,
+    };
+    for (const bet of bets) {
+      const stake = stakeOf(bet);
+      summary.staked += stake;
+      summary.profit += profitOf(bet);
+      const outcome = String(bet.outcome || "").toLowerCase();
+      if (outcome === "won") summary.won += 1;
+      else if (outcome === "lost") summary.lost += 1;
+      else if (outcome === "push") summary.push += 1;
+      else if (outcome === "void") summary.voided += 1;
+      else summary.pending += 1;
+      if (SETTLED.has(outcome)) summary.settled += 1;
+      const ev = num(bet.ev_pct);
+      if (ev != null && stake > 0) {
+        summary.evStake += stake;
+        summary.evWeighted += ev * stake;
+      }
+    }
+    summary.roi = summary.staked ? summary.profit / summary.staked : null;
+    summary.avgEv = summary.evStake ? summary.evWeighted / summary.evStake : null;
+    return summary;
+  }
+
+  function filteredBets() {
+    const query = state.market.trim().toLowerCase();
+    return state.data.bets.filter((bet) => {
+      if (state.book && bet.book !== state.book) return false;
+      if (state.league && bet.tournament !== state.league) return false;
+      if (query) {
+        const haystack = `${bet.market} ${bet.bet} ${bet.selection} ${bet.matchup}`.toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      const day = dayOf(bet);
+      if (state.from && day && day < state.from) return false;
+      if (state.to && day && day > state.to) return false;
+      if (state.settled && !isSettled(bet)) return false;
+      return true;
+    });
+  }
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  function kpi(label, value, sub, valueClass) {
+    const card = el("article", "kpi");
+    card.append(el("span", null, label));
+    card.append(el("strong", valueClass || "", value));
+    if (sub) card.append(el("em", null, sub));
+    return card;
+  }
+
+  function renderKpis(summary) {
+    els.kpis.replaceChildren(
+      kpi("Profit", money(summary.profit), ratio(summary.roi) + " ROI", tone(summary.profit)),
+      kpi("Wagered", money(summary.staked), `${summary.count.toLocaleString()} bets`),
+      kpi(
+        "Record",
+        `${summary.won.toLocaleString()}–${summary.lost.toLocaleString()}`,
+        `${summary.push} push · ${summary.voided} void · ${summary.pending} open`,
+      ),
+      kpi("Hit rate", summary.won + summary.lost ? ratio(summary.won / (summary.won + summary.lost)) : "—", "wins / decisions"),
+      kpi("Avg EV", points(summary.avgEv), "stake-weighted"),
+      kpi("Open", summary.pending.toLocaleString(), "no outcome yet"),
+    );
+  }
+
+  function renderBooks(allBooks) {
+    const all = el("button", null, "All books");
+    all.type = "button";
+    all.setAttribute("aria-pressed", state.book ? "false" : "true");
+    all.addEventListener("click", () => {
+      state.book = "";
+      state.betLimit = PAGE;
+      render();
+    });
+    const buttons = [all];
+    for (const book of allBooks) {
+      const button = el("button", null, book);
+      button.type = "button";
+      button.setAttribute("aria-pressed", state.book === book ? "true" : "false");
+      button.addEventListener("click", () => {
+        state.book = state.book === book ? "" : book;
+        state.betLimit = PAGE;
+        render();
+      });
+      buttons.push(button);
+    }
+    els.books.replaceChildren(...buttons);
+  }
+
+  function fillFilters() {
+    const leagues = [...new Set(state.data.bets.map((bet) => bet.tournament).filter(Boolean))].sort();
+    const options = [new Option("All leagues", "")];
+    for (const league of leagues) options.push(new Option(league, league));
+    els.league.replaceChildren(...options);
+    const days = state.data.bets.map(dayOf).filter(Boolean).sort();
+    if (days.length) {
+      els.from.min = days[0];
+      els.from.max = days[days.length - 1];
+      els.to.min = days[0];
+      els.to.max = days[days.length - 1];
+    }
+  }
+
+  function seriesOf(bets) {
+    const rows = bets
+      .filter((bet) => num(bet.profit) != null && bet.placed_at)
+      .slice()
+      .sort((a, b) => String(a.placed_at).localeCompare(String(b.placed_at)));
+    let running = 0;
+    return rows.map((bet) => {
+      running += bet.profit;
+      return { at: bet.placed_at, profit: running };
+    });
+  }
+
+  function drawChart(bets) {
+    const canvas = els.canvas;
+    const width = canvas.clientWidth || 600;
+    const height = canvas.clientHeight || 240;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.floor(width * dpr));
+    canvas.height = Math.max(1, Math.floor(height * dpr));
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    const points = seriesOf(bets);
+    state.chartPoints = points.map((point, index) => ({
+      ...point,
+      x: 0,
+      y: 0,
+      index,
+    }));
+    if (!points.length) {
+      els.readout.textContent = "No settled profit in this slice.";
+      return;
+    }
+
+    const pad = { top: 16, right: 12, bottom: 22, left: 64 };
+    const values = points.map((point) => point.profit);
+    let min = Math.min(0, ...values);
+    let max = Math.max(0, ...values);
+    if (min === max) {
+      min -= 1;
+      max += 1;
+    }
+    const xAt = (index) => {
+      if (points.length === 1) return pad.left + (width - pad.left - pad.right) / 2;
+      return pad.left + (index / (points.length - 1)) * (width - pad.left - pad.right);
+    };
+    const yAt = (value) => pad.top + ((max - value) / (max - min)) * (height - pad.top - pad.bottom);
+
+    ctx.strokeStyle = "#2c352e";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, yAt(0));
+    ctx.lineTo(width - pad.right, yAt(0));
+    ctx.stroke();
+
+    ctx.fillStyle = "#9aa394";
+    ctx.font = "12px IBM Plex Mono, ui-monospace, monospace";
+    ctx.textAlign = "right";
+    ctx.fillText(money(max), pad.left - 8, pad.top + 4);
+    ctx.fillText(money(min), pad.left - 8, height - pad.bottom);
+
+    const end = points[points.length - 1].profit;
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      const x = xAt(index);
+      const y = yAt(point.profit);
+      state.chartPoints[index].x = x;
+      state.chartPoints[index].y = y;
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = end >= 0 ? "#8fce78" : "#ef8b72";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    const last = state.chartPoints[state.chartPoints.length - 1];
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.beginPath();
+    ctx.arc(last.x, last.y, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    els.readout.textContent = `${formatDay(points[0].at)} – ${formatDay(points[points.length - 1].at)} · ${money(end)}`;
+  }
+
+  function onChartMove(event) {
+    if (!state.chartPoints.length) return;
+    const rect = els.canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    let nearest = state.chartPoints[0];
+    let best = Math.abs(nearest.x - x);
+    for (const point of state.chartPoints) {
+      const distance = Math.abs(point.x - x);
+      if (distance < best) {
+        nearest = point;
+        best = distance;
+      }
+    }
+    els.readout.textContent = `${formatDay(nearest.at)} · ${money(nearest.profit)} cumulative`;
+  }
+
+  function groupRows(bets, keyFn) {
+    const books = booksIn(bets);
+    const groups = new Map();
+    for (const bet of bets) {
+      const key = keyFn(bet) || "—";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(bet);
+    }
+    const rows = [...groups.entries()].map(([label, items]) => {
+      const byBook = {};
+      for (const book of books) byBook[book] = summarize(items.filter((bet) => bet.book === book));
+      return { label, total: summarize(items), byBook };
+    });
+    const { key, dir } = state.sort;
+    const sign = dir === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+      if (key === "label") return a.label.localeCompare(b.label, undefined, { numeric: true }) * sign;
+      const left = key === "total" ? a.total.profit : a.byBook[key]?.profit || 0;
+      const right = key === "total" ? b.total.profit : b.byBook[key]?.profit || 0;
+      return (left - right) * sign || a.label.localeCompare(b.label);
+    });
+    return { books, rows };
+  }
+
+  function summaryCell(summary) {
+    const cell = el("td", "num cell");
+    if (!summary || !summary.count) {
+      cell.append(el("span", "muted", "—"));
+      return cell;
+    }
+    cell.title = `Wagered ${money(summary.staked)} · ${summary.count} bets`;
+    cell.append(el("strong", tone(summary.profit), money(summary.profit)));
+    cell.append(el("small", null, `${ratio(summary.roi)} · ${summary.count.toLocaleString()}`));
+    return cell;
+  }
+
+  function renderMatrix(bets, keyFn, labelName) {
+    const { books, rows } = groupRows(bets, keyFn);
+    const table = el("table");
+    const head = el("thead");
+    const headRow = el("tr");
+    const columns = [{ key: "label", name: labelName }].concat(
+      books.map((book) => ({ key: book, name: book })),
+      [{ key: "total", name: "Total" }],
+    );
+    if (books.length < 2) columns.pop();
+    for (const column of columns) {
+      const th = el("th", column.key === "label" ? "sortable" : "num sortable", column.name);
+      if (state.sort.key === column.key) th.textContent += state.sort.dir === "asc" ? " ↑" : " ↓";
+      th.addEventListener("click", () => {
+        if (state.sort.key === column.key) state.sort.dir = state.sort.dir === "asc" ? "desc" : "asc";
+        else state.sort = { key: column.key, dir: column.key === "label" ? "asc" : "desc" };
+        render();
+      });
+      headRow.append(th);
+    }
+    head.append(headRow);
+    table.append(head);
+
+    const body = el("tbody");
+    for (const row of rows) {
+      const tr = el("tr");
+      const label = el("td", null, state.view === "month" ? formatMonth(row.label) : row.label);
+      tr.append(label);
+      for (const book of books) tr.append(summaryCell(row.byBook[book]));
+      if (books.length >= 2) tr.append(summaryCell(row.total));
+      body.append(tr);
+    }
+    const total = summarize(bets);
+    const totalRow = el("tr", "total");
+    totalRow.append(el("td", null, "All"));
+    for (const book of books) {
+      totalRow.append(summaryCell(summarize(bets.filter((bet) => bet.book === book))));
+    }
+    if (books.length >= 2) totalRow.append(summaryCell(total));
+    body.append(totalRow);
+    table.append(body);
+
+    const wrap = el("div", "table-wrap");
+    wrap.append(table);
+    els.tableRoot.replaceChildren(wrap);
+    els.tableMeta.textContent = `${rows.length.toLocaleString()} ${labelName.toLowerCase()}${rows.length === 1 ? "" : "s"}`;
+  }
+
+  function renderBets(bets) {
+    const shown = bets
+      .slice()
+      .sort((a, b) => String(b.placed_at).localeCompare(String(a.placed_at)))
+      .slice(0, state.betLimit);
+    const table = el("table", "bets");
+    const head = el("tr");
+    for (const name of ["Date", "Book", "League", "Matchup", "Market", "Bet", "Odds", "Matched", "Result", "Profit"]) {
+      head.append(el("th", ["Matched", "Profit"].includes(name) ? "num" : "", name));
+    }
+    const headEl = el("thead");
+    headEl.append(head);
+    table.append(headEl);
+    const body = el("tbody");
+    for (const bet of shown) {
+      const tr = el("tr");
+      const cells = [
+        formatDay(bet.placed_at),
+        bet.book || "—",
+        bet.tournament || "—",
+        bet.matchup || "—",
+        bet.market || "—",
+        labelForBet(bet),
+        bet.odds || "—",
+      ];
+      for (const value of cells) tr.append(el("td", null, value));
+      tr.append(el("td", "num", money(stakeOf(bet))));
+      const result = el("td");
+      result.append(el("span", "tag", bet.outcome || "open"));
+      tr.append(result);
+      tr.append(el("td", `num ${tone(num(bet.profit))}`, money(num(bet.profit))));
+      body.append(tr);
+    }
+    table.append(body);
+    const wrap = el("div", "table-wrap");
+    wrap.append(table);
+    const fragment = document.createDocumentFragment();
+    fragment.append(wrap);
+    if (shown.length < bets.length) {
+      const more = el("button", "more", `Show more (${shown.length.toLocaleString()} of ${bets.length.toLocaleString()})`);
+      more.type = "button";
+      more.addEventListener("click", () => {
+        state.betLimit += PAGE;
+        render();
+      });
+      fragment.append(more);
+    }
+    els.tableRoot.replaceChildren(fragment);
+    els.tableMeta.textContent = `${bets.length.toLocaleString()} bets`;
+  }
+
+  function renderTable(bets) {
+    if (!bets.length) {
+      els.tableRoot.replaceChildren(el("p", "muted", "No bets match these filters."));
+      els.tableMeta.textContent = "";
+      return;
+    }
+    if (state.view === "bets") renderBets(bets);
+    else if (state.view === "market") renderMatrix(bets, (bet) => bet.market, "Market");
+    else if (state.view === "month") renderMatrix(bets, monthOf, "Month");
+    else renderMatrix(bets, (bet) => bet.tournament, "League");
+  }
+
+  function average(values) {
+    if (!values.length) return null;
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+  }
+
+  function renderBovada() {
+    const rows = state.data.bovada || [];
+    if (!rows.length) {
+      els.bovadaKpis.replaceChildren();
+      els.bovadaRoot.replaceChildren(el("p", "muted", "No Bovada rows in this snapshot."));
+      return;
+    }
+    const evs = rows.map((row) => num(row.ev_pct)).filter((value) => value != null);
+    const clvs = rows.map((row) => num(row.clv_pct)).filter((value) => value != null);
+    const positiveClv = clvs.filter((value) => value > 0).length;
+    const placed = rows.filter((row) => num(row.stake));
+    const staked = placed.reduce((sum, row) => sum + row.stake, 0);
+    const profit = placed.reduce((sum, row) => sum + (num(row.profit) || 0), 0);
+    const expected = placed.reduce((sum, row) => {
+      const ev = num(row.ev_pct);
+      return ev == null ? sum : sum + row.stake * (ev / 100);
+    }, 0);
+    const record = { won: 0, lost: 0, push: 0 };
+    for (const row of placed) {
+      const outcome = String(row.outcome || "").toLowerCase();
+      if (outcome === "won") record.won += 1;
+      else if (outcome === "push") record.push += 1;
+      else if (outcome) record.lost += 1;
+    }
+    els.bovadaKpis.replaceChildren(
+      kpi("Picks", rows.length.toLocaleString(), `${points(average(evs))} avg EV`),
+      kpi("Avg CLV", points(average(clvs)), clvs.length ? `${ratio(positiveClv / clvs.length)} positive` : "no closing line"),
+      kpi("Staked", money(staked), `${placed.length} bets placed`),
+      kpi("Profit", money(profit), staked ? `${ratio(profit / staked)} ROI` : "—", tone(profit)),
+      kpi("Expected", money(expected), "stake × EV, placed bets"),
+      kpi("Record", `${record.won}–${record.lost}`, `${record.push} push`),
+    );
+
+    const sports = new Map();
+    for (const row of rows) {
+      const sport = row.sport || "—";
+      if (!sports.has(sport)) sports.set(sport, []);
+      sports.get(sport).push(row);
+    }
+    const table = el("table");
+    const head = el("tr");
+    for (const name of ["Sport", "Picks", "Avg EV", "Avg CLV", "Bets", "Staked", "Profit", "ROI"]) {
+      head.append(el("th", name === "Sport" ? "" : "num", name));
+    }
+    const headEl = el("thead");
+    headEl.append(head);
+    table.append(headEl);
+    const body = el("tbody");
+    const sportRows = [...sports.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    for (const [sport, items] of sportRows) {
+      const placedItems = items.filter((row) => num(row.stake));
+      const sportStake = placedItems.reduce((sum, row) => sum + row.stake, 0);
+      const sportProfit = placedItems.reduce((sum, row) => sum + (num(row.profit) || 0), 0);
+      const tr = el("tr");
+      tr.append(el("td", null, sport));
+      tr.append(el("td", "num", String(items.length)));
+      tr.append(el("td", "num", points(average(items.map((row) => num(row.ev_pct)).filter((value) => value != null)))));
+      tr.append(el("td", "num", points(average(items.map((row) => num(row.clv_pct)).filter((value) => value != null)))));
+      tr.append(el("td", "num", String(placedItems.length)));
+      tr.append(el("td", "num", money(sportStake)));
+      tr.append(el("td", `num ${tone(sportProfit)}`, money(sportProfit)));
+      tr.append(el("td", "num", sportStake ? ratio(sportProfit / sportStake) : "—"));
+      body.append(tr);
+    }
+    table.append(body);
+    const wrap = el("div", "table-wrap");
+    wrap.append(table);
+    els.bovadaRoot.replaceChildren(wrap);
+  }
+
+  function viewFromHash() {
+    const hash = location.hash.replace("#", "");
+    if (hash === "markets") return "market";
+    if (hash === "months") return "month";
+    if (hash === "bets") return "bets";
+    return "league";
+  }
+
+  function readUrl() {
+    const params = new URLSearchParams(location.search);
+    state.book = params.get("book") || "";
+    state.league = params.get("league") || "";
+    state.market = params.get("market") || "";
+    state.from = params.get("from") || "";
+    state.to = params.get("to") || "";
+    state.settled = params.get("settled") === "1";
+    state.view = viewFromHash();
+    state.sort = state.view === "month" ? { key: "label", dir: "asc" } : { key: "total", dir: "desc" };
+  }
+
+  function writeUrl() {
+    const params = new URLSearchParams();
+    if (state.book) params.set("book", state.book);
+    if (state.league) params.set("league", state.league);
+    if (state.market) params.set("market", state.market);
+    if (state.from) params.set("from", state.from);
+    if (state.to) params.set("to", state.to);
+    if (state.settled) params.set("settled", "1");
+    const query = params.toString();
+    const hash = { market: "#markets", month: "#months", bets: "#bets" }[state.view] || "";
+    const next = `${location.pathname}${query ? `?${query}` : ""}${hash}`;
+    const current = `${location.pathname}${location.search}${location.hash}`;
+    if (current !== next) history.replaceState(null, "", next);
+  }
+
+  function render() {
+    const bets = filteredBets();
+    const summary = summarize(bets);
+    renderBooks(booksIn(state.data.bets));
+    renderKpis(summary);
+    drawChart(bets);
+    renderTable(bets);
+    for (const tab of els.views.querySelectorAll("[data-view]")) {
+      tab.setAttribute("aria-selected", tab.dataset.view === state.view ? "true" : "false");
+    }
+    writeUrl();
+  }
+
+  function showError(message) {
+    els.banner.hidden = false;
+    els.banner.textContent = message;
+    els.snapshot.textContent = "Snapshot unavailable";
+  }
+
+  async function init() {
+    let response;
+    try {
+      response = await fetch("./data/bets.json");
+    } catch (error) {
+      showError("Could not load data/bets.json. Serve this folder over http, or push the snapshot to GitHub Pages.");
+      return;
+    }
+    if (!response.ok) {
+      showError(`Could not load data/bets.json (${response.status}).`);
+      return;
+    }
+    state.data = await response.json();
+    const when = state.data.exported_at
+      ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(state.data.exported_at))
+      : "unknown time";
+    const count = (state.data.bets || []).length;
+    els.snapshot.textContent = `${count.toLocaleString()} bets · exported ${when}`;
+    readUrl();
+    fillFilters();
+    if ([...els.league.options].some((option) => option.value === state.league)) els.league.value = state.league;
+    els.market.value = state.market;
+    els.from.value = state.from;
+    els.to.value = state.to;
+    els.settled.checked = state.settled;
+    renderBovada();
+    render();
+  }
+
+  els.league.addEventListener("change", () => {
+    state.league = els.league.value;
+    state.betLimit = PAGE;
+    render();
+  });
+  els.market.addEventListener("input", () => {
+    state.market = els.market.value;
+    state.betLimit = PAGE;
+    render();
+  });
+  els.from.addEventListener("change", () => {
+    state.from = els.from.value;
+    state.betLimit = PAGE;
+    render();
+  });
+  els.to.addEventListener("change", () => {
+    state.to = els.to.value;
+    state.betLimit = PAGE;
+    render();
+  });
+  els.settled.addEventListener("change", () => {
+    state.settled = els.settled.checked;
+    state.betLimit = PAGE;
+    render();
+  });
+  els.clear.addEventListener("click", () => {
+    state.book = "";
+    state.league = "";
+    state.market = "";
+    state.from = "";
+    state.to = "";
+    state.settled = false;
+    state.betLimit = PAGE;
+    els.league.value = "";
+    els.market.value = "";
+    els.from.value = "";
+    els.to.value = "";
+    els.settled.checked = false;
+    render();
+  });
+  function controlFromEvent(event) {
+    const node = event.target && event.target.nodeType === 1 ? event.target : event.target && event.target.parentElement;
+    return node && node.closest ? node.closest("[data-view], button") : null;
+  }
+
+  els.views.addEventListener("click", (event) => {
+    const tab = controlFromEvent(event);
+    if (!tab || !tab.dataset.view) return;
+    event.preventDefault();
+    state.view = tab.dataset.view;
+    state.sort = state.view === "month" ? { key: "label", dir: "asc" } : { key: "total", dir: "desc" };
+    state.betLimit = PAGE;
+    render();
+  });
+  window.addEventListener("hashchange", () => {
+    const view = viewFromHash();
+    if (view === state.view) return;
+    state.view = view;
+    state.sort = view === "month" ? { key: "label", dir: "asc" } : { key: "total", dir: "desc" };
+    state.betLimit = PAGE;
+    render();
+  });
+  els.canvas.addEventListener("mousemove", onChartMove);
+  els.canvas.addEventListener("mouseleave", () => {
+    if (state.data) drawChart(filteredBets());
+  });
+  window.addEventListener("resize", () => {
+    if (state.data) drawChart(filteredBets());
+  });
+
+  init();
+})();
