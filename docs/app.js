@@ -43,6 +43,34 @@
     bovadaRoot: document.querySelector("#bovada-root"),
   };
 
+  const oddsTip = el("div", "odds-tip");
+  oddsTip.hidden = true;
+  oddsTip.setAttribute("role", "tooltip");
+  document.body.append(oddsTip);
+
+  function placeOddsTip(target) {
+    const discord = target.dataset.discord;
+    if (!discord) return;
+    oddsTip.textContent = `Discord ${discord}`;
+    oddsTip.hidden = false;
+    const rect = target.getBoundingClientRect();
+    const tipRect = oddsTip.getBoundingClientRect();
+    const left = Math.max(8, Math.min(rect.left + rect.width / 2 - tipRect.width / 2, window.innerWidth - tipRect.width - 8));
+    let top = rect.top - tipRect.height - 8;
+    if (top < 8) top = rect.bottom + 8;
+    oddsTip.style.left = `${left}px`;
+    oddsTip.style.top = `${top}px`;
+  }
+
+  function hideOddsTip() {
+    oddsTip.hidden = true;
+  }
+
+  function oddsHoverTarget(event) {
+    const node = event.target && event.target.nodeType === 1 ? event.target : event.target && event.target.parentElement;
+    return node && node.closest ? node.closest(".odds-hover") : null;
+  }
+
   function num(value) {
     return typeof value === "number" && Number.isFinite(value) ? value : null;
   }
@@ -540,6 +568,23 @@
     els.tableMeta.textContent = `${rows.length.toLocaleString()} ${labelName.toLowerCase()}${rows.length === 1 ? "" : "s"}`;
   }
 
+  function oddsCell(bet) {
+    const cell = el("td");
+    const display = formatOdds(bet.odds);
+    const discordRaw = bet.discord_odds;
+    if (discordRaw == null || String(discordRaw).trim() === "") {
+      cell.textContent = display;
+      return cell;
+    }
+    const discord = formatOdds(discordRaw);
+    const trigger = el("span", "odds-hover", display);
+    trigger.tabIndex = 0;
+    trigger.dataset.discord = discord;
+    trigger.setAttribute("aria-label", `Bet odds ${display}, Discord odds ${discord}`);
+    cell.append(trigger);
+    return cell;
+  }
+
   function renderBets(bets) {
     const shown = bets
       .slice()
@@ -563,9 +608,9 @@
         bet.matchup || "—",
         bet.market || "—",
         labelForBet(bet),
-        formatOdds(bet.odds),
       ];
       for (const value of cells) tr.append(el("td", null, value));
+      tr.append(oddsCell(bet));
       tr.append(el("td", "num", points(num(bet.ev_pct))));
       tr.append(el("td", "num", money(stakeOf(bet))));
       const result = el("td");
@@ -715,6 +760,7 @@
   }
 
   function render() {
+    hideOddsTip();
     state.hoverIndex = null;
     const bets = filteredBets();
     const summary = summarize(bets);
@@ -834,6 +880,28 @@
   window.addEventListener("resize", () => {
     if (state.data) drawChart(filteredBets());
   });
+
+  els.tableRoot.addEventListener("mouseover", (event) => {
+    const target = oddsHoverTarget(event);
+    if (target) placeOddsTip(target);
+  });
+  els.tableRoot.addEventListener("mouseout", (event) => {
+    const target = oddsHoverTarget(event);
+    if (!target) return;
+    if (event.relatedTarget && target.contains(event.relatedTarget)) return;
+    hideOddsTip();
+  });
+  els.tableRoot.addEventListener("focusin", (event) => {
+    const target = oddsHoverTarget(event);
+    if (target) placeOddsTip(target);
+  });
+  els.tableRoot.addEventListener("focusout", (event) => {
+    const target = oddsHoverTarget(event);
+    if (!target) return;
+    if (event.relatedTarget && target.contains(event.relatedTarget)) return;
+    hideOddsTip();
+  });
+  document.addEventListener("scroll", hideOddsTip, true);
 
   init();
 })();

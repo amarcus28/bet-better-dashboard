@@ -29,7 +29,7 @@ body {
 }
 
 .page {
-  width: min(1180px, calc(100% - 32px));
+  width: min(1760px, calc(100% - 48px));
   margin: 0 auto;
   padding: 32px 0 64px;
 }
@@ -234,6 +234,33 @@ tr.total td {
 
 .bets td { white-space: normal; }
 
+.odds-hover {
+  border-bottom: 1px dotted var(--faint);
+  cursor: help;
+  outline: none;
+}
+
+.odds-hover:focus-visible {
+  border-bottom-color: var(--accent);
+}
+
+.odds-tip {
+  position: fixed;
+  z-index: 20;
+  padding: 4px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: #101410;
+  color: var(--accent);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.odds-tip[hidden] { display: none; }
+
 .tag {
   display: inline-block;
   min-width: 52px;
@@ -260,7 +287,7 @@ tr.total td {
 }
 
 @media (max-width: 560px) {
-  .page { width: min(100% - 20px, 1180px); }
+  .page { width: calc(100% - 20px); }
   h1 { font-size: 26px; }
   .kpis { grid-template-columns: 1fr; }
 }
