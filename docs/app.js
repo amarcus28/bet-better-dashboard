@@ -96,17 +96,29 @@
     return month || "—";
   }
 
+  const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  function monthParts(iso) {
+    const match = String(iso || "").match(/^(\d{4})-(\d{2})/);
+    if (!match) return null;
+    const index = Number(match[2]) - 1;
+    if (index < 0 || index > 11) return null;
+    return { year: match[1], index };
+  }
+
   function formatDay(iso) {
     if (!iso) return "—";
-    const [year, month, day] = iso.slice(0, 10).split("-");
-    if (!year || !month || !day) return iso;
-    const names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return `${Number(day)} ${names[Number(month) - 1] || month} ${year}`;
+    const parts = monthParts(iso);
+    const day = Number(String(iso).slice(8, 10));
+    if (!parts || !day) return iso;
+    return `${day} ${MONTHS_SHORT[parts.index]} ${parts.year}`;
   }
 
   function formatMonth(key) {
-    if (!/^\d{4}-\d{2}$/.test(key)) return key;
-    return formatDay(`${key}-01`).slice(3);
+    const parts = monthParts(key);
+    if (!parts) return key;
+    return `${MONTHS[parts.index]} ${parts.year}`;
   }
 
   function booksIn(bets) {
@@ -272,7 +284,7 @@
       return;
     }
 
-    const pad = { top: 16, right: 12, bottom: 22, left: 64 };
+    const pad = { top: 16, right: 16, bottom: 36, left: 72 };
     const values = points.map((point) => point.profit);
     let min = Math.min(0, ...values);
     let max = Math.max(0, ...values);
@@ -296,8 +308,11 @@
     ctx.fillStyle = "#9aa394";
     ctx.font = "12px IBM Plex Mono, ui-monospace, monospace";
     ctx.textAlign = "right";
-    ctx.fillText(money(max), pad.left - 8, pad.top + 4);
-    ctx.fillText(money(min), pad.left - 8, height - pad.bottom);
+    ctx.textBaseline = "top";
+    ctx.fillText(money(max), pad.left - 8, pad.top);
+    ctx.textBaseline = "bottom";
+    ctx.fillText(money(min), pad.left - 8, height - pad.bottom - 2);
+    drawXAxis(ctx, points, xAt, height, pad);
 
     const end = points[points.length - 1].profit;
     ctx.beginPath();
@@ -320,6 +335,43 @@
     ctx.fill();
 
     els.readout.textContent = `${formatDay(points[0].at)} – ${formatDay(points[points.length - 1].at)} · ${money(end)}`;
+  }
+
+  function axisDate(iso, withYear) {
+    const parts = monthParts(iso);
+    if (!parts) return "";
+    const day = Number(String(iso).slice(8, 10)) || 1;
+    const stem = `${MONTHS_SHORT[parts.index]} ${day}`;
+    return withYear ? `${stem}, ${parts.year}` : stem;
+  }
+
+  function drawXAxis(ctx, points, xAt, height, pad) {
+    const plotWidth = Math.max(0, xAt(points.length - 1) - xAt(0));
+    const slots = Math.max(2, Math.min(6, Math.floor(plotWidth / 96) || 2));
+    const indexes = [];
+    for (let slot = 0; slot < slots; slot += 1) {
+      const index = points.length === 1 ? 0 : Math.round(slot * (points.length - 1) / (slots - 1));
+      if (indexes[indexes.length - 1] !== index) indexes.push(index);
+    }
+    ctx.fillStyle = "#9aa394";
+    ctx.font = "11px IBM Plex Mono, ui-monospace, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.strokeStyle = "#2c352e";
+    ctx.lineWidth = 1;
+    let lastX = -Infinity;
+    indexes.forEach((index, position) => {
+      const x = xAt(index);
+      const isLast = position === indexes.length - 1;
+      if (position > 0 && !isLast && x - lastX < 72) return;
+      if (isLast && x - lastX < 72 && position > 0) return;
+      ctx.beginPath();
+      ctx.moveTo(x, height - pad.bottom);
+      ctx.lineTo(x, height - pad.bottom + 5);
+      ctx.stroke();
+      ctx.fillText(axisDate(points[index].at, position === 0), x, height - pad.bottom + 8);
+      lastX = x;
+    });
   }
 
   function onChartMove(event) {
