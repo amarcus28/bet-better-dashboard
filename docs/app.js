@@ -67,6 +67,15 @@
     return value > 0 ? "pos" : "neg";
   }
 
+  function formatOdds(value) {
+    if (value == null || value === "") return "—";
+    const text = String(value).trim();
+    if (!text) return "—";
+    const numeric = Number(text);
+    if (Number.isFinite(numeric) && numeric > 0 && !text.startsWith("+")) return `+${text}`;
+    return text;
+  }
+
   function stakeOf(bet) {
     const matched = num(bet.matched_stake);
     return matched == null ? 0 : matched;
@@ -538,8 +547,8 @@
       .slice(0, state.betLimit);
     const table = el("table", "bets");
     const head = el("tr");
-    for (const name of ["Date", "Book", "League", "Matchup", "Market", "Bet", "Odds", "Matched", "Result", "Profit"]) {
-      head.append(el("th", ["Matched", "Profit"].includes(name) ? "num" : "", name));
+    for (const name of ["Date", "Book", "League", "Matchup", "Market", "Bet", "Odds", "EV", "Matched", "Result", "Profit"]) {
+      head.append(el("th", ["EV", "Matched", "Profit"].includes(name) ? "num" : "", name));
     }
     const headEl = el("thead");
     headEl.append(head);
@@ -554,12 +563,13 @@
         bet.matchup || "—",
         bet.market || "—",
         labelForBet(bet),
-        bet.odds || "—",
+        formatOdds(bet.odds),
       ];
       for (const value of cells) tr.append(el("td", null, value));
+      tr.append(el("td", "num", points(num(bet.ev_pct))));
       tr.append(el("td", "num", money(stakeOf(bet))));
       const result = el("td");
-      result.append(el("span", "tag", bet.outcome || "open"));
+      result.append(el("span", `tag ${tone(num(bet.profit))}`, bet.outcome || "open"));
       tr.append(result);
       tr.append(el("td", `num ${tone(num(bet.profit))}`, money(num(bet.profit))));
       body.append(tr);
