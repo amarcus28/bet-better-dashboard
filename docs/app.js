@@ -106,7 +106,7 @@
 
   // American prices: +100 and -100 are the same even-money point, and the
   // scale runs outward from there. Nothing valid sits between -99 and 99.
-  const ODDS_GAP = 0.1;
+  const ODDS_GAP = 0.05;
 
   function payoutPerUnit(value) {
     const odds = Number(String(value ?? "").trim());
