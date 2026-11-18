@@ -15,6 +15,7 @@
     sort: { key: "total", dir: "desc" },
     betLimit: PAGE,
     chartPoints: [],
+    hoverIndex: null,
   };
 
   const moneyFormat = new Intl.NumberFormat("en-US", {
@@ -113,6 +114,12 @@
     const day = Number(String(iso).slice(8, 10));
     if (!parts || !day) return iso;
     return `${day} ${MONTHS_SHORT[parts.index]} ${parts.year}`;
+  }
+
+  function formatWhen(iso) {
+    const day = formatDay(iso);
+    const time = String(iso || "").match(/T(\d{2}):(\d{2})/);
+    return time ? `${day} ${time[1]}:${time[2]}` : day;
   }
 
   function formatMonth(key) {
@@ -279,7 +286,11 @@
       y: 0,
       index,
     }));
+    if (state.hoverIndex != null && (state.hoverIndex < 0 || state.hoverIndex >= points.length)) {
+      state.hoverIndex = null;
+    }
     if (!points.length) {
+      state.hoverIndex = null;
       els.readout.textContent = "No settled profit in this slice.";
       return;
     }
@@ -334,7 +345,51 @@
     ctx.arc(last.x, last.y, 3.5, 0, Math.PI * 2);
     ctx.fill();
 
-    els.readout.textContent = `${formatDay(points[0].at)} – ${formatDay(points[points.length - 1].at)} · ${money(end)}`;
+    const hover = state.hoverIndex == null ? null : state.chartPoints[state.hoverIndex];
+    if (hover) {
+      drawHoverGuide(ctx, hover, width, height, pad);
+      els.readout.textContent = `${formatDay(hover.at)} · ${money(hover.profit)} cumulative`;
+    } else {
+      els.readout.textContent = `${formatDay(points[0].at)} – ${formatDay(points[points.length - 1].at)} · ${money(end)}`;
+    }
+  }
+
+  function drawHoverGuide(ctx, point, width, height, pad) {
+    const axisY = height - pad.bottom;
+    ctx.save();
+    ctx.strokeStyle = "rgba(228, 195, 106, 0.9)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(point.x, pad.top);
+    ctx.lineTo(point.x, axisY);
+    ctx.stroke();
+
+    ctx.fillStyle = "#e4c36a";
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#101410";
+    ctx.stroke();
+
+    const label = formatWhen(point.at);
+    ctx.font = "11px IBM Plex Mono, ui-monospace, monospace";
+    const boxW = ctx.measureText(label).width + 12;
+    const boxH = 18;
+    const boxX = Math.max(4, Math.min(width - boxW - 4, point.x - boxW / 2));
+    const boxY = axisY + 6;
+    ctx.fillStyle = "#101410";
+    ctx.beginPath();
+    ctx.roundRect(boxX, boxY, boxW, boxH, 4);
+    ctx.fill();
+    ctx.strokeStyle = "#e4c36a";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = "#e4c36a";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, boxX + 6, boxY + boxH / 2);
+    ctx.restore();
   }
 
   function axisDate(iso, withYear) {
@@ -375,19 +430,21 @@
   }
 
   function onChartMove(event) {
-    if (!state.chartPoints.length) return;
+    if (!state.chartPoints.length || !state.data) return;
     const rect = els.canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
-    let nearest = state.chartPoints[0];
-    let best = Math.abs(nearest.x - x);
-    for (const point of state.chartPoints) {
+    let nearestIndex = 0;
+    let best = Math.abs(state.chartPoints[0].x - x);
+    state.chartPoints.forEach((point, index) => {
       const distance = Math.abs(point.x - x);
       if (distance < best) {
-        nearest = point;
+        nearestIndex = index;
         best = distance;
       }
-    }
-    els.readout.textContent = `${formatDay(nearest.at)} · ${money(nearest.profit)} cumulative`;
+    });
+    if (state.hoverIndex === nearestIndex) return;
+    state.hoverIndex = nearestIndex;
+    drawChart(filteredBets());
   }
 
   function groupRows(bets, keyFn) {
@@ -648,6 +705,7 @@
   }
 
   function render() {
+    state.hoverIndex = null;
     const bets = filteredBets();
     const summary = summarize(bets);
     renderBooks(booksIn(state.data.bets));
@@ -759,6 +817,8 @@
   });
   els.canvas.addEventListener("mousemove", onChartMove);
   els.canvas.addEventListener("mouseleave", () => {
+    if (state.hoverIndex == null) return;
+    state.hoverIndex = null;
     if (state.data) drawChart(filteredBets());
   });
   window.addEventListener("resize", () => {
