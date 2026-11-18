@@ -2,6 +2,10 @@
   const BOOK_ORDER = ["ProphetX", "Kalshi", "Novig", "Polymarket"];
   const SETTLED = new Set(["won", "lost", "push", "void"]);
   const PAGE = 60;
+  // American prices: +100 and -100 are the same even-money point, and the
+  // scale runs outward from there. Nothing valid sits between -99 and 99.
+  const ODDS_GAP = 0.05;
+  const ODDS_GAP_LABEL = `${(ODDS_GAP * 100).toFixed(ODDS_GAP * 100 % 1 ? 1 : 0)}%`;
 
   const state = {
     data: null,
@@ -51,7 +55,7 @@
   function placeOddsTip(target) {
     const discord = target.dataset.discord;
     if (!discord) return;
-    oddsTip.textContent = target.dataset.warn ? `Discord ${discord} · over 10% off` : `Discord ${discord}`;
+    oddsTip.textContent = target.dataset.warn ? `Discord ${discord} · over ${ODDS_GAP_LABEL} off` : `Discord ${discord}`;
     oddsTip.hidden = false;
     const rect = target.getBoundingClientRect();
     const tipRect = oddsTip.getBoundingClientRect();
@@ -103,10 +107,6 @@
     if (Number.isFinite(numeric) && numeric > 0 && !text.startsWith("+")) return `+${text}`;
     return text;
   }
-
-  // American prices: +100 and -100 are the same even-money point, and the
-  // scale runs outward from there. Nothing valid sits between -99 and 99.
-  const ODDS_GAP = 0.05;
 
   function payoutPerUnit(value) {
     const odds = Number(String(value ?? "").trim());
@@ -613,7 +613,7 @@
     trigger.setAttribute(
       "aria-label",
       warn
-        ? `Bet odds ${display}, Discord odds ${discord}, more than 10% apart`
+        ? `Bet odds ${display}, Discord odds ${discord}, more than ${ODDS_GAP_LABEL} apart`
         : `Bet odds ${display}, Discord odds ${discord}`,
     );
     cell.append(trigger);
