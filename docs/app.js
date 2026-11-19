@@ -2,6 +2,7 @@
   const BOOK_ORDER = ["ProphetX", "Kalshi", "Novig", "Polymarket"];
   const SETTLED = new Set(["won", "lost", "push", "void"]);
   const PAGE = 60;
+  const DEFAULT_RANGE_DAYS = 30;
   const SUPABASE_URL = "https://pygnirbppsekiwzwtdvj.supabase.co";
   const SUPABASE_KEY = "sb_publishable_uYrKVr0Ex6Ttva21StRkDA_wthWhuzs";
   const FETCH_PAGE = 1000;
@@ -155,6 +156,16 @@
 
   function dayOf(bet) {
     return String(bet.placed_at || "").slice(0, 10);
+  }
+
+  function isoDaysAgo(days) {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() - days);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
 
   function monthOf(bet) {
@@ -775,7 +786,8 @@
     state.book = params.get("book") || "";
     state.league = params.get("league") || "";
     state.market = params.get("market") || "";
-    state.from = params.get("from") || "";
+    const hasDateRange = params.has("from") || params.has("to");
+    state.from = hasDateRange ? params.get("from") || "" : isoDaysAgo(DEFAULT_RANGE_DAYS);
     state.to = params.get("to") || "";
     state.settled = params.get("settled") === "1";
     state.view = viewFromHash();
@@ -787,7 +799,8 @@
     if (state.book) params.set("book", state.book);
     if (state.league) params.set("league", state.league);
     if (state.market) params.set("market", state.market);
-    if (state.from) params.set("from", state.from);
+    // Persist empty from after Clear so reload does not re-default to 30 days.
+    params.set("from", state.from);
     if (state.to) params.set("to", state.to);
     if (state.settled) params.set("settled", "1");
     const query = params.toString();
