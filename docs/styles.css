@@ -183,6 +183,36 @@ input[type="search"] { width: 100%; }
   margin-bottom: 12px;
 }
 
+.panel-head-end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.bets-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bets-status button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.bets-status button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1a1608;
+  font-weight: 700;
+}
+
 canvas {
   display: block;
   width: 100%;

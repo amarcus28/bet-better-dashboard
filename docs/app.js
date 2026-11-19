@@ -19,6 +19,7 @@
     from: "",
     to: "",
     settled: false,
+    betStatus: "settled",
     view: "league",
     sort: { key: "total", dir: "desc" },
     betLimit: PAGE,
@@ -45,6 +46,7 @@
     readout: document.querySelector("#chart-readout"),
     canvas: document.querySelector("#pnl-chart"),
     views: document.querySelector("#views"),
+    betsStatus: document.querySelector("#bets-status"),
     tableMeta: document.querySelector("#table-meta"),
     tableRoot: document.querySelector("#table-root"),
     bovadaKpis: document.querySelector("#bovada-kpis"),
@@ -634,8 +636,27 @@
     return cell;
   }
 
+  function betsForStatus(bets) {
+    return bets.filter((bet) => (state.betStatus === "open" ? !isSettled(bet) : isSettled(bet)));
+  }
+
+  function syncBetsStatus() {
+    const onBets = state.view === "bets";
+    els.betsStatus.hidden = !onBets;
+    for (const button of els.betsStatus.querySelectorAll("[data-status]")) {
+      button.setAttribute("aria-pressed", button.dataset.status === state.betStatus ? "true" : "false");
+    }
+  }
+
   function renderBets(bets) {
-    const shown = bets
+    const statusBets = betsForStatus(bets);
+    if (!statusBets.length) {
+      const label = state.betStatus === "open" ? "open" : "settled";
+      els.tableRoot.replaceChildren(el("p", "muted", `No ${label} bets match these filters.`));
+      els.tableMeta.textContent = `0 ${label} bets`;
+      return;
+    }
+    const shown = statusBets
       .slice()
       .sort((a, b) => String(b.placed_at).localeCompare(String(a.placed_at)))
       .slice(0, state.betLimit);
@@ -673,8 +694,8 @@
     wrap.append(table);
     const fragment = document.createDocumentFragment();
     fragment.append(wrap);
-    if (shown.length < bets.length) {
-      const more = el("button", "more", `Show more (${shown.length.toLocaleString()} of ${bets.length.toLocaleString()})`);
+    if (shown.length < statusBets.length) {
+      const more = el("button", "more", `Show more (${shown.length.toLocaleString()} of ${statusBets.length.toLocaleString()})`);
       more.type = "button";
       more.addEventListener("click", () => {
         state.betLimit += PAGE;
@@ -683,17 +704,21 @@
       fragment.append(more);
     }
     els.tableRoot.replaceChildren(fragment);
-    els.tableMeta.textContent = `${bets.length.toLocaleString()} bets`;
+    const label = state.betStatus === "open" ? "open" : "settled";
+    els.tableMeta.textContent = `${statusBets.length.toLocaleString()} ${label} bets`;
   }
 
   function renderTable(bets) {
+    if (state.view === "bets") {
+      renderBets(bets);
+      return;
+    }
     if (!bets.length) {
       els.tableRoot.replaceChildren(el("p", "muted", "No bets match these filters."));
       els.tableMeta.textContent = "";
       return;
     }
-    if (state.view === "bets") renderBets(bets);
-    else if (state.view === "market") renderMatrix(bets, (bet) => bet.market, "Market");
+    if (state.view === "market") renderMatrix(bets, (bet) => bet.market, "Market");
     else if (state.view === "month") renderMatrix(bets, monthOf, "Month");
     else renderMatrix(bets, (bet) => bet.tournament, "League");
   }
@@ -818,6 +843,7 @@
     renderBooks(booksIn(state.data.bets));
     renderKpis(summary);
     drawChart(bets);
+    syncBetsStatus();
     renderTable(bets);
     for (const tab of els.views.querySelectorAll("[data-view]")) {
       tab.setAttribute("aria-selected", tab.dataset.view === state.view ? "true" : "false");
@@ -929,12 +955,20 @@
     state.from = "";
     state.to = "";
     state.settled = false;
+    state.betStatus = "settled";
     state.betLimit = PAGE;
     els.league.value = "";
     els.market.value = "";
     els.from.value = "";
     els.to.value = "";
     els.settled.checked = false;
+    render();
+  });
+  els.betsStatus.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-status]");
+    if (!button) return;
+    state.betStatus = button.dataset.status;
+    state.betLimit = PAGE;
     render();
   });
   function controlFromEvent(event) {
