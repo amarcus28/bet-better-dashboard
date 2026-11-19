@@ -47,6 +47,7 @@
     canvas: document.querySelector("#pnl-chart"),
     views: document.querySelector("#views"),
     betsStatus: document.querySelector("#bets-status"),
+    betsOpen: document.querySelector("#bets-open"),
     tableMeta: document.querySelector("#table-meta"),
     tableRoot: document.querySelector("#table-root"),
     bovadaKpis: document.querySelector("#bovada-kpis"),
@@ -641,11 +642,8 @@
   }
 
   function syncBetsStatus() {
-    const onBets = state.view === "bets";
-    els.betsStatus.hidden = !onBets;
-    for (const button of els.betsStatus.querySelectorAll("[data-status]")) {
-      button.setAttribute("aria-pressed", button.dataset.status === state.betStatus ? "true" : "false");
-    }
+    els.betsStatus.hidden = state.view !== "bets";
+    els.betsOpen.checked = state.betStatus === "open";
   }
 
   function renderBets(bets) {
@@ -964,10 +962,8 @@
     els.settled.checked = false;
     render();
   });
-  els.betsStatus.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-status]");
-    if (!button) return;
-    state.betStatus = button.dataset.status;
+  els.betsOpen.addEventListener("change", () => {
+    state.betStatus = els.betsOpen.checked ? "open" : "settled";
     state.betLimit = PAGE;
     render();
   });
