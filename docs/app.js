@@ -653,7 +653,7 @@
 
   function renderMatrix(bets, keyFn, labelName) {
     const { books, rows } = groupRows(bets, keyFn);
-    const table = el("table");
+    const table = el("table", "matrix");
     const head = el("thead");
     const headRow = el("tr");
     const columns = [{ key: "label", name: labelName }].concat(
@@ -662,7 +662,7 @@
     );
     if (books.length < 2) columns.pop();
     for (const column of columns) {
-      const th = el("th", column.key === "label" ? "sortable" : "num sortable", column.name);
+      const th = el("th", column.key === "label" ? "label sortable" : "num sortable", column.name);
       if (state.sort.key === column.key) th.textContent += state.sort.dir === "asc" ? " ↑" : " ↓";
       th.addEventListener("click", () => {
         if (state.sort.key === column.key) state.sort.dir = state.sort.dir === "asc" ? "desc" : "asc";
@@ -677,7 +677,7 @@
     const body = el("tbody");
     for (const row of rows) {
       const tr = el("tr");
-      const label = el("td", null, state.view === "month" ? formatMonth(row.label) : row.label);
+      const label = el("td", "label", state.view === "month" ? formatMonth(row.label) : row.label);
       tr.append(label);
       for (const book of books) tr.append(summaryCell(row.byBook[book]));
       if (books.length >= 2) tr.append(summaryCell(row.total));
@@ -685,7 +685,7 @@
     }
     const total = summarize(bets);
     const totalRow = el("tr", "total");
-    totalRow.append(el("td", null, "All"));
+    totalRow.append(el("td", "label", "All"));
     for (const book of books) {
       totalRow.append(summaryCell(summarize(bets.filter((bet) => bet.book === book))));
     }
