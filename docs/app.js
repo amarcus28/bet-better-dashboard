@@ -289,10 +289,9 @@
   oddsTip.setAttribute("role", "tooltip");
   document.body.append(oddsTip);
 
-  function placeOddsTip(target) {
-    const discord = target.dataset.discord;
-    if (!discord) return;
-    oddsTip.textContent = target.dataset.warn ? `Discord ${discord} · over ${ODDS_GAP_LABEL} off` : `Discord ${discord}`;
+  function placeTip(text, target) {
+    if (!text) return;
+    oddsTip.textContent = text;
     oddsTip.hidden = false;
     const rect = target.getBoundingClientRect();
     const tipRect = oddsTip.getBoundingClientRect();
@@ -303,13 +302,19 @@
     oddsTip.style.top = `${top}px`;
   }
 
+  function placeOddsTip(target) {
+    const discord = target.dataset.discord;
+    if (!discord) return;
+    placeTip(target.dataset.warn ? `Discord ${discord} · over ${ODDS_GAP_LABEL} off` : `Discord ${discord}`, target);
+  }
+
   function hideOddsTip() {
     oddsTip.hidden = true;
   }
 
   function oddsHoverTarget(event) {
     const node = event.target && event.target.nodeType === 1 ? event.target : event.target && event.target.parentElement;
-    return node && node.closest ? node.closest(".odds-hover") : null;
+    return node && node.closest ? node.closest(".odds-hover, .date-hover") : null;
   }
 
   function num(value) {
@@ -419,6 +424,16 @@
     const day = formatDay(iso);
     const time = String(iso || "").match(/T(\d{2}):(\d{2})/);
     return time ? `${day} ${time[1]}:${time[2]}` : day;
+  }
+
+  function formatStamp(iso) {
+    const text = String(iso || "");
+    const time = text.match(/T(\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (!time) return "";
+    const seconds = time[3] ? `:${time[3]}` : "";
+    const offset = text.match(/([+-]\d{2}:\d{2}|Z)$/);
+    const zone = !offset || offset[1] === "Z" || offset[1] === "+00:00" || offset[1] === "-00:00" ? " UTC" : ` ${offset[1]}`;
+    return `${formatDay(text)} ${time[1]}:${time[2]}${seconds}${zone}`;
   }
 
   function formatMonth(key) {
@@ -969,6 +984,22 @@
     return cell;
   }
 
+  function dateCell(iso) {
+    const cell = el("td");
+    const label = formatDay(iso);
+    const stamp = formatStamp(iso);
+    if (!stamp) {
+      cell.textContent = label;
+      return cell;
+    }
+    const trigger = el("span", "date-hover", label);
+    trigger.tabIndex = 0;
+    trigger.dataset.stamp = stamp;
+    trigger.setAttribute("aria-label", stamp);
+    cell.append(trigger);
+    return cell;
+  }
+
   function betsForStatus(bets) {
     return bets.filter((bet) => (state.betStatus === "open" ? !isSettled(bet) : isSettled(bet)));
   }
@@ -1000,7 +1031,7 @@
     const body = el("tbody");
     for (const bet of shown) {
       const tr = el("tr");
-      tr.append(el("td", null, formatDay(bet.placed_at)));
+      tr.append(dateCell(bet.placed_at));
       tr.append(el("td", null, bet.book || "—"));
       tr.append(leagueCell(bet));
       for (const value of [bet.matchup || "—", bet.market || "—", labelForBet(bet)]) {
@@ -1342,7 +1373,9 @@
   function bindOddsTip(root) {
     root.addEventListener("mouseover", (event) => {
       const target = oddsHoverTarget(event);
-      if (target) placeOddsTip(target);
+      if (!target) return;
+      if (target.classList.contains("date-hover")) placeTip(target.dataset.stamp, target);
+      else placeOddsTip(target);
     });
     root.addEventListener("mouseout", (event) => {
       const target = oddsHoverTarget(event);
@@ -1352,7 +1385,9 @@
     });
     root.addEventListener("focusin", (event) => {
       const target = oddsHoverTarget(event);
-      if (target) placeOddsTip(target);
+      if (!target) return;
+      if (target.classList.contains("date-hover")) placeTip(target.dataset.stamp, target);
+      else placeOddsTip(target);
     });
     root.addEventListener("focusout", (event) => {
       const target = oddsHoverTarget(event);

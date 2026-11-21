@@ -353,13 +353,15 @@ tr.total td {
 
 .bets td { white-space: normal; }
 
-.odds-hover {
+.odds-hover,
+.date-hover {
   border-bottom: 1px dotted var(--faint);
   cursor: help;
   outline: none;
 }
 
-.odds-hover:focus-visible {
+.odds-hover:focus-visible,
+.date-hover:focus-visible {
   border-bottom-color: var(--accent);
 }
 
