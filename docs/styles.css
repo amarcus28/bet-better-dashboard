@@ -305,12 +305,28 @@ th.sortable { cursor: pointer; }
 
 th.num, td.num { text-align: right; }
 
+/* Hug content instead of stretching across the panel width. */
+table.matrix {
+  width: max-content;
+  max-width: 100%;
+}
+
+.matrix th,
+.matrix td {
+  padding: 6px 8px;
+}
+
 .matrix th.label,
 .matrix td.label {
   width: 1%;
-  padding-left: 2px;
-  padding-right: 12px;
+  padding-left: 0;
+  padding-right: 16px;
   white-space: nowrap;
+}
+
+.matrix th.num:last-child,
+.matrix td.num:last-child {
+  padding-right: 0;
 }
 
 tr.total td {
