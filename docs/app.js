@@ -240,7 +240,7 @@
     return summary;
   }
 
-  function filteredBets({ ignoreDates = false } = {}) {
+  function filteredBets() {
     const query = state.market.trim().toLowerCase();
     return state.data.bets.filter((bet) => {
       if (state.book && bet.book !== state.book) return false;
@@ -249,18 +249,12 @@
         const haystack = `${bet.market} ${bet.bet} ${bet.selection} ${bet.matchup}`.toLowerCase();
         if (!haystack.includes(query)) return false;
       }
-      if (!ignoreDates) {
-        const day = dayOf(bet);
-        if (state.from && day && day < state.from) return false;
-        if (state.to && day && day > state.to) return false;
-      }
+      const day = dayOf(bet);
+      if (state.from && day && day < state.from) return false;
+      if (state.to && day && day > state.to) return false;
       if (state.settled && !isSettled(bet)) return false;
       return true;
     });
-  }
-
-  function chartBets() {
-    return filteredBets({ ignoreDates: true });
   }
 
   function el(tag, className, text) {
@@ -347,35 +341,12 @@
     return String(point?.at || "").slice(0, 10);
   }
 
-  function selectionIndexes(points) {
-    if (!points.length) return null;
-    if (state.chartBrush) {
-      return [
-        Math.min(state.chartBrush.anchor, state.chartBrush.current),
-        Math.max(state.chartBrush.anchor, state.chartBrush.current),
-      ];
-    }
-    if (!state.from && !state.to) return null;
-    let start = 0;
-    let end = points.length - 1;
-    if (state.from) {
-      const index = points.findIndex((point) => chartDay(point) >= state.from);
-      if (index === -1) return null;
-      start = index;
-    }
-    if (state.to) {
-      let found = -1;
-      for (let index = points.length - 1; index >= 0; index -= 1) {
-        if (chartDay(points[index]) <= state.to) {
-          found = index;
-          break;
-        }
-      }
-      if (found === -1) return null;
-      end = found;
-    }
-    if (start > end) return null;
-    return [start, end];
+  function brushIndexes() {
+    if (!state.chartBrush || !state.chartPoints.length) return null;
+    return [
+      Math.min(state.chartBrush.anchor, state.chartBrush.current),
+      Math.max(state.chartBrush.anchor, state.chartBrush.current),
+    ];
   }
 
   function drawRangeBand(ctx, points, start, end, height, pad) {
@@ -414,7 +385,7 @@
   }
 
   function redrawChart() {
-    if (state.data) drawChart(chartBets());
+    if (state.data) drawChart(filteredBets());
   }
 
   function drawChart(bets) {
@@ -480,8 +451,8 @@
       state.chartPoints[index].y = yAt(point.profit);
     });
 
-    const selected = selectionIndexes(state.chartPoints);
-    if (selected) drawRangeBand(ctx, state.chartPoints, selected[0], selected[1], height, pad);
+    const brush = brushIndexes();
+    if (brush) drawRangeBand(ctx, state.chartPoints, brush[0], brush[1], height, pad);
 
     const end = points[points.length - 1].profit;
     ctx.beginPath();
@@ -499,9 +470,8 @@
     ctx.arc(last.x, last.y, 3.5, 0, Math.PI * 2);
     ctx.fill();
 
-    if (state.chartBrush && selected) {
-      const [start, stop] = selected;
-      els.readout.textContent = `${formatDay(points[start].at)} – ${formatDay(points[stop].at)}`;
+    if (brush) {
+      els.readout.textContent = `${formatDay(points[brush[0]].at)} – ${formatDay(points[brush[1]].at)}`;
       return;
     }
 
@@ -509,12 +479,8 @@
     if (hover) {
       drawHoverGuide(ctx, hover, width, height, pad);
       els.readout.textContent = `${formatDay(hover.at)} · ${money(hover.profit)} cumulative`;
-    } else if (state.from || state.to) {
-      const startLabel = state.from ? formatDay(state.from) : formatDay(points[0].at);
-      const endLabel = state.to ? formatDay(state.to) : formatDay(points[points.length - 1].at);
-      els.readout.textContent = `${startLabel} – ${endLabel} selected · drag to change`;
     } else {
-      els.readout.textContent = `${formatDay(points[0].at)} – ${formatDay(points[points.length - 1].at)} · ${money(end)} · drag to select`;
+      els.readout.textContent = `${formatDay(points[0].at)} – ${formatDay(points[points.length - 1].at)} · ${money(end)}`;
     }
   }
 
@@ -961,7 +927,7 @@
     const summary = summarize(bets);
     renderBooks(booksIn(state.data.bets));
     renderKpis(summary);
-    drawChart(chartBets());
+    drawChart(bets);
     syncBetsStatus();
     renderTable(bets);
     for (const tab of els.views.querySelectorAll("[data-view]")) {
