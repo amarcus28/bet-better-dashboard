@@ -207,10 +207,6 @@ input[type="search"] { width: 100%; }
   user-select: none;
 }
 
-.bets-status[hidden] {
-  display: none !important;
-}
-
 .bets-status span:first-child,
 .bets-status span:last-child {
   transition: color 0.15s ease;
@@ -338,6 +334,18 @@ tr.total td {
 .cell strong { display: block; }
 
 .cell small { display: block; font-size: 12px; }
+
+.league-raw {
+  display: block;
+  max-width: 320px;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: normal;
+}
 
 .pos { color: var(--pos); }
 .neg { color: var(--neg); }

@@ -10,6 +10,234 @@
   const ODDS_GAP = 0.05;
   const ODDS_GAP_LABEL = `${(ODDS_GAP * 100).toFixed(ODDS_GAP * 100 % 1 ? 1 : 0)}%`;
 
+  // League grouping. US leagues stay as themselves. International rows are
+  // usually a country or a cup name, and the same competition is not labeled
+  // the same way on every book. A specific market or club token wins; otherwise
+  // a country label falls back to the sport it has meant in this feed.
+  const STANDALONE_CODES = {
+    nba: "NBA",
+    ncaab: "NCAAB",
+    wnba: "WNBA",
+    nfl: "NFL",
+    ncaaf: "NCAAF",
+    mlb: "MLB",
+    nhl: "NHL",
+    ufc: "UFC",
+    kbo: "KBO",
+    cbb: "NCAAB",
+    cfb: "NCAAF",
+  };
+  const STANDALONE_ALIASES = {
+    "national basketball association": "NBA",
+    "ncaa basketball": "NCAAB",
+    "ncaa mens basketball": "NCAAB",
+    "college basketball": "NCAAB",
+    "national football league": "NFL",
+    "ncaa football": "NCAAF",
+    "college football": "NCAAF",
+    "major league baseball": "MLB",
+    "kbo league": "KBO",
+  };
+  const SPORT_GROUP = {
+    basketball: "International Basketball",
+    soccer: "International Soccer",
+    baseball: "International Baseball",
+    tennis: "Tennis",
+  };
+  const SOCCER_MARKETS = [
+    "asian handicap",
+    "both teams to score",
+    "btts",
+    "correct score",
+    "draw no bet",
+    "double chance",
+    "total goals",
+    "total corners",
+    "anytime scorer",
+    "anytime goalscorer",
+    "goal scorer",
+    "clean sheet",
+    "3 way",
+  ];
+  const BASEBALL_MARKETS = ["run line", "total runs", "player hits", "player strikeouts", "player home runs"];
+  const TENNIS_MARKETS = ["total games", "game spread", "total sets", "set spread"];
+  const BASKETBALL_MARKETS = [
+    "point spread",
+    "total points",
+    "player points",
+    "player rebounds",
+    "player assists",
+    "player threes",
+    "player steals",
+    "player blocks",
+    "three pointers",
+    "player pra",
+  ];
+  // Longer phrases first so "basketball champions league" is not read as soccer.
+  const COMPETITION_PHRASES = [
+    ["basketball champions league", "basketball"],
+    ["champions league", "soccer"],
+    ["europa league", "soccer"],
+    ["conference league", "soccer"],
+    ["premier league", "soccer"],
+    ["la liga", "soccer"],
+    ["bundesliga", "soccer"],
+    ["ligue 1", "soccer"],
+    ["liga mx", "soccer"],
+    ["primeira liga", "soccer"],
+    ["eredivisie", "soccer"],
+    ["saudi pro league", "soccer"],
+    ["scottish premiership", "soccer"],
+    ["copa libertadores", "soccer"],
+    ["copa america", "soccer"],
+    ["world cup", "soccer"],
+    ["fa cup", "soccer"],
+    ["super lig", "soccer"],
+    ["euro league", "basketball"],
+    ["euro cup", "basketball"],
+    ["b league", "basketball"],
+    ["lega basket", "basketball"],
+  ];
+  const COMPETITION_TOKENS = {
+    euroleague: "basketball",
+    eurocup: "basketball",
+    concacaf: "soccer",
+    conmebol: "soccer",
+    uefa: "soccer",
+    fifa: "soccer",
+    efl: "soccer",
+    epl: "soccer",
+    mls: "soccer",
+    lnbp: "basketball",
+    nbb: "basketball",
+    acb: "basketball",
+    kbl: "basketball",
+    cba: "basketball",
+    nbl: "basketball",
+    bsl: "basketball",
+    fiba: "basketball",
+    atp: "tennis",
+    wta: "tennis",
+    itf: "tennis",
+  };
+  const BASKETBALL_PHRASES = ["basquete", "basketbol", "basketball", "basket", "lnbp", "baskonia", "unifacisa"];
+  const BASKETBALL_TOKENS = ["bc", "bk", "bsb"];
+  const SOCCER_TOKENS = ["fc", "cf", "afc", "cd", "calcio"];
+  // Bare country labels in this feed. Spain is omitted on purpose: the same
+  // label is used for ACB basketball and Spanish soccer. A market or club
+  // token on the bet still overrides the default, which is how Brazil soccer
+  // stays out of the basketball group.
+  const COUNTRY_DEFAULT = [
+    ["saudi arabia", "soccer"],
+    ["australia", "basketball"],
+    ["brazil", "basketball"],
+    ["china", "basketball"],
+    ["england", "soccer"],
+    ["germany", "basketball"],
+    ["greece", "basketball"],
+    ["japan", "basketball"],
+    ["korea", "basketball"],
+    ["lithuania", "basketball"],
+    ["mexico", "basketball"],
+    ["saudi", "soccer"],
+    ["scotland", "soccer"],
+    ["turkey", "basketball"],
+  ];
+
+  function norm(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/&/g, " and ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  function hasToken(text, token) {
+    return new RegExp(`(?:^|[^a-z0-9])${token}(?:$|[^a-z0-9])`).test(text);
+  }
+
+  function standaloneLeague(tournament) {
+    const name = norm(tournament);
+    if (!name) return null;
+    if (STANDALONE_CODES[name]) return STANDALONE_CODES[name];
+    if (STANDALONE_ALIASES[name]) return STANDALONE_ALIASES[name];
+    for (const [code, label] of Object.entries(STANDALONE_CODES)) {
+      if (name.startsWith(`${code} `)) return label;
+    }
+    return null;
+  }
+
+  function phraseSport(text) {
+    for (const [phrase, sport] of COMPETITION_PHRASES) {
+      if (text.includes(phrase)) return sport;
+    }
+    return null;
+  }
+
+  function competitionSport(text) {
+    if (!text) return null;
+    const fromPhrase = phraseSport(text);
+    if (fromPhrase) return fromPhrase;
+    for (const [token, sport] of Object.entries(COMPETITION_TOKENS)) {
+      if (hasToken(text, token)) return sport;
+    }
+    return null;
+  }
+
+  function tokenSport(matchup) {
+    if (BASKETBALL_PHRASES.some((phrase) => matchup.includes(phrase))) return "basketball";
+    if (BASKETBALL_TOKENS.some((token) => hasToken(matchup, token))) return "basketball";
+    if (SOCCER_TOKENS.some((token) => hasToken(matchup, token))) return "soccer";
+    return null;
+  }
+
+  function countryDefault(tournament) {
+    for (const [name, sport] of COUNTRY_DEFAULT) {
+      if (hasToken(tournament, name)) return sport;
+    }
+    return null;
+  }
+
+  function marketSport(market) {
+    if (SOCCER_MARKETS.some((phrase) => market.includes(phrase))) return "soccer";
+    if (TENNIS_MARKETS.some((phrase) => market.includes(phrase))) return "tennis";
+    if (BASEBALL_MARKETS.some((phrase) => market.includes(phrase))) return "baseball";
+    if (BASKETBALL_MARKETS.some((phrase) => market.includes(phrase))) return "basketball";
+    return null;
+  }
+
+  function detectSport(bet) {
+    const tournament = norm(bet.tournament);
+    const matchup = norm(bet.matchup);
+    const market = norm(bet.market);
+    return (
+      marketSport(market) ||
+      competitionSport(tournament) ||
+      tokenSport(matchup) ||
+      phraseSport(matchup) ||
+      countryDefault(tournament)
+    );
+  }
+
+  function leagueGroup(bet) {
+    const standalone = standaloneLeague(bet.tournament);
+    if (standalone) return standalone;
+    const sport = detectSport(bet);
+    if (sport && SPORT_GROUP[sport]) return SPORT_GROUP[sport];
+    const raw = String(bet.tournament || "").trim();
+    return raw || "—";
+  }
+
+  function resolveLeagueParam(bets, requested) {
+    if (!requested) return "";
+    if (bets.some((bet) => bet.league === requested)) return requested;
+    const groups = new Set(
+      bets.filter((bet) => (bet.tournament || "") === requested).map((bet) => bet.league),
+    );
+    if (groups.size === 1) return [...groups][0];
+    return "";
+  }
+
   const state = {
     data: null,
     book: "",
@@ -50,6 +278,8 @@
     betsOpen: document.querySelector("#bets-open"),
     tableMeta: document.querySelector("#table-meta"),
     tableRoot: document.querySelector("#table-root"),
+    betsMeta: document.querySelector("#bets-meta"),
+    betsRoot: document.querySelector("#bets-root"),
     bovadaKpis: document.querySelector("#bovada-kpis"),
     bovadaRoot: document.querySelector("#bovada-root"),
   };
@@ -244,7 +474,7 @@
     const query = state.market.trim().toLowerCase();
     return state.data.bets.filter((bet) => {
       if (state.book && bet.book !== state.book) return false;
-      if (state.league && bet.tournament !== state.league) return false;
+      if (state.league && bet.league !== state.league) return false;
       if (query) {
         const haystack = `${bet.market} ${bet.bet} ${bet.selection} ${bet.matchup}`.toLowerCase();
         if (!haystack.includes(query)) return false;
@@ -312,7 +542,9 @@
   }
 
   function fillFilters() {
-    const leagues = [...new Set(state.data.bets.map((bet) => bet.tournament).filter(Boolean))].sort();
+    const leagues = [...new Set(state.data.bets.map((bet) => bet.league).filter((league) => league && league !== "—"))].sort(
+      (a, b) => a.localeCompare(b),
+    );
     const options = [new Option("All leagues", "")];
     for (const league of leagues) options.push(new Option(league, league));
     els.league.replaceChildren(...options);
@@ -626,7 +858,14 @@
     const rows = [...groups.entries()].map(([label, items]) => {
       const byBook = {};
       for (const book of books) byBook[book] = summarize(items.filter((bet) => bet.book === book));
-      return { label, total: summarize(items), byBook };
+      const sources = [
+        ...new Set(
+          items
+            .map((bet) => String(bet.tournament || "").trim())
+            .filter((name) => name && name.toLowerCase() !== label.toLowerCase()),
+        ),
+      ].sort((a, b) => a.localeCompare(b));
+      return { label, total: summarize(items), byBook, sources };
     });
     const { key, dir } = state.sort;
     const sign = dir === "asc" ? 1 : -1;
@@ -677,7 +916,11 @@
     const body = el("tbody");
     for (const row of rows) {
       const tr = el("tr");
-      const label = el("td", "label", state.view === "month" ? formatMonth(row.label) : row.label);
+      const label = el("td", "label");
+      label.textContent = state.view === "month" ? formatMonth(row.label) : row.label;
+      if (state.view === "league" && row.sources.length) {
+        label.append(el("span", "league-raw", row.sources.join(", ")));
+      }
       tr.append(label);
       for (const book of books) tr.append(summaryCell(row.byBook[book]));
       if (books.length >= 2) tr.append(summaryCell(row.total));
@@ -731,7 +974,6 @@
   }
 
   function syncBetsStatus() {
-    els.betsStatus.hidden = state.view !== "bets";
     els.betsOpen.checked = state.betStatus === "open";
   }
 
@@ -739,8 +981,8 @@
     const statusBets = betsForStatus(bets);
     if (!statusBets.length) {
       const label = state.betStatus === "open" ? "open" : "settled";
-      els.tableRoot.replaceChildren(el("p", "muted", `No ${label} bets match these filters.`));
-      els.tableMeta.textContent = `0 ${label} bets`;
+      els.betsRoot.replaceChildren(el("p", "muted", `No ${label} bets match these filters.`));
+      els.betsMeta.textContent = `0 ${label} bets`;
       return;
     }
     const shown = statusBets
@@ -758,15 +1000,12 @@
     const body = el("tbody");
     for (const bet of shown) {
       const tr = el("tr");
-      const cells = [
-        formatDay(bet.placed_at),
-        bet.book || "—",
-        bet.tournament || "—",
-        bet.matchup || "—",
-        bet.market || "—",
-        labelForBet(bet),
-      ];
-      for (const value of cells) tr.append(el("td", null, value));
+      tr.append(el("td", null, formatDay(bet.placed_at)));
+      tr.append(el("td", null, bet.book || "—"));
+      tr.append(leagueCell(bet));
+      for (const value of [bet.matchup || "—", bet.market || "—", labelForBet(bet)]) {
+        tr.append(el("td", null, value));
+      }
       tr.append(oddsCell(bet));
       tr.append(el("td", "num", points(num(bet.ev_pct))));
       tr.append(el("td", "num", money(stakeOf(bet))));
@@ -790,16 +1029,12 @@
       });
       fragment.append(more);
     }
-    els.tableRoot.replaceChildren(fragment);
+    els.betsRoot.replaceChildren(fragment);
     const label = state.betStatus === "open" ? "open" : "settled";
-    els.tableMeta.textContent = `${statusBets.length.toLocaleString()} ${label} bets`;
+    els.betsMeta.textContent = `${statusBets.length.toLocaleString()} ${label} bets`;
   }
 
   function renderTable(bets) {
-    if (state.view === "bets") {
-      renderBets(bets);
-      return;
-    }
     if (!bets.length) {
       els.tableRoot.replaceChildren(el("p", "muted", "No bets match these filters."));
       els.tableMeta.textContent = "";
@@ -807,7 +1042,7 @@
     }
     if (state.view === "market") renderMatrix(bets, (bet) => bet.market, "Market");
     else if (state.view === "month") renderMatrix(bets, monthOf, "Month");
-    else renderMatrix(bets, (bet) => bet.tournament, "League");
+    else renderMatrix(bets, (bet) => bet.league, "League");
   }
 
   function average(values) {
@@ -889,7 +1124,6 @@
     const hash = location.hash.replace("#", "");
     if (hash === "markets") return "market";
     if (hash === "months") return "month";
-    if (hash === "bets") return "bets";
     return "league";
   }
 
@@ -914,7 +1148,7 @@
     if (state.to) params.set("to", state.to);
     if (state.settled) params.set("settled", "1");
     const query = params.toString();
-    const hash = { market: "#markets", month: "#months", bets: "#bets" }[state.view] || "";
+    const hash = { market: "#markets", month: "#months" }[state.view] || "#leagues";
     const next = `${location.pathname}${query ? `?${query}` : ""}${hash}`;
     const current = `${location.pathname}${location.search}${location.hash}`;
     if (current !== next) history.replaceState(null, "", next);
@@ -930,6 +1164,7 @@
     drawChart(bets);
     syncBetsStatus();
     renderTable(bets);
+    renderBets(bets);
     for (const tab of els.views.querySelectorAll("[data-view]")) {
       tab.setAttribute("aria-selected", tab.dataset.view === state.view ? "true" : "false");
     }
@@ -943,7 +1178,7 @@
   }
 
   function toDashboardBet(row) {
-    return {
+    const bet = {
       placed_at: row.placed_at,
       book: row.book || "",
       tournament: row.tournament,
@@ -958,6 +1193,18 @@
       outcome: row.outcome,
       profit: row.profit,
     };
+    bet.league = leagueGroup(bet);
+    return bet;
+  }
+
+  function leagueCell(bet) {
+    const cell = el("td");
+    cell.append(document.createTextNode(bet.league || "—"));
+    const raw = String(bet.tournament || "").trim();
+    if (raw && raw.toLowerCase() !== String(bet.league || "").toLowerCase()) {
+      cell.append(el("span", "league-raw", raw));
+    }
+    return cell;
   }
 
   async function loadBets() {
@@ -997,7 +1244,9 @@
       ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(latest))
       : "no bets yet";
     els.snapshot.textContent = `${bets.length.toLocaleString()} bets · latest ${when}`;
+    const scrollToBets = location.hash === "#bets";
     readUrl();
+    state.league = resolveLeagueParam(bets, state.league);
     fillFilters();
     if ([...els.league.options].some((option) => option.value === state.league)) els.league.value = state.league;
     els.market.value = state.market;
@@ -1006,6 +1255,7 @@
     els.settled.checked = state.settled;
     renderBovada();
     render();
+    if (scrollToBets) document.querySelector("#bets")?.scrollIntoView({ block: "start" });
   }
 
   els.league.addEventListener("change", () => {
@@ -1065,15 +1315,17 @@
     event.preventDefault();
     state.view = tab.dataset.view;
     state.sort = state.view === "month" ? { key: "label", dir: "asc" } : { key: "total", dir: "desc" };
-    state.betLimit = PAGE;
     render();
   });
   window.addEventListener("hashchange", () => {
+    if (location.hash === "#bets") {
+      document.querySelector("#bets")?.scrollIntoView({ block: "start" });
+      return;
+    }
     const view = viewFromHash();
     if (view === state.view) return;
     state.view = view;
     state.sort = view === "month" ? { key: "label", dir: "asc" } : { key: "total", dir: "desc" };
-    state.betLimit = PAGE;
     render();
   });
   els.canvas.addEventListener("pointerdown", onChartPointerDown);
@@ -1087,26 +1339,29 @@
   });
   window.addEventListener("resize", redrawChart);
 
-  els.tableRoot.addEventListener("mouseover", (event) => {
-    const target = oddsHoverTarget(event);
-    if (target) placeOddsTip(target);
-  });
-  els.tableRoot.addEventListener("mouseout", (event) => {
-    const target = oddsHoverTarget(event);
-    if (!target) return;
-    if (event.relatedTarget && target.contains(event.relatedTarget)) return;
-    hideOddsTip();
-  });
-  els.tableRoot.addEventListener("focusin", (event) => {
-    const target = oddsHoverTarget(event);
-    if (target) placeOddsTip(target);
-  });
-  els.tableRoot.addEventListener("focusout", (event) => {
-    const target = oddsHoverTarget(event);
-    if (!target) return;
-    if (event.relatedTarget && target.contains(event.relatedTarget)) return;
-    hideOddsTip();
-  });
+  function bindOddsTip(root) {
+    root.addEventListener("mouseover", (event) => {
+      const target = oddsHoverTarget(event);
+      if (target) placeOddsTip(target);
+    });
+    root.addEventListener("mouseout", (event) => {
+      const target = oddsHoverTarget(event);
+      if (!target) return;
+      if (event.relatedTarget && target.contains(event.relatedTarget)) return;
+      hideOddsTip();
+    });
+    root.addEventListener("focusin", (event) => {
+      const target = oddsHoverTarget(event);
+      if (target) placeOddsTip(target);
+    });
+    root.addEventListener("focusout", (event) => {
+      const target = oddsHoverTarget(event);
+      if (!target) return;
+      if (event.relatedTarget && target.contains(event.relatedTarget)) return;
+      hideOddsTip();
+    });
+  }
+  bindOddsTip(els.betsRoot);
   document.addEventListener("scroll", hideOddsTip, true);
 
   init();
