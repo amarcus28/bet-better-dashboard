@@ -2,7 +2,6 @@
   const BOOK_ORDER = ["ProphetX", "Kalshi", "Novig", "Polymarket"];
   const SETTLED = new Set(["won", "lost", "push", "void"]);
   const PAGE = 60;
-  const DEFAULT_RANGE_DAYS = 30;
   const SUPABASE_URL = "https://pygnirbppsekiwzwtdvj.supabase.co";
   const SUPABASE_KEY = "sb_publishable_uYrKVr0Ex6Ttva21StRkDA_wthWhuzs";
   const FETCH_PAGE = 1000;
@@ -25,6 +24,7 @@
     betLimit: PAGE,
     chartPoints: [],
     hoverIndex: null,
+    chartBrush: null,
   };
 
   const moneyFormat = new Intl.NumberFormat("en-US", {
@@ -161,16 +161,6 @@
     return String(bet.placed_at || "").slice(0, 10);
   }
 
-  function isoDaysAgo(days) {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() - days);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-
   function monthOf(bet) {
     const month = String(bet.placed_at || "").slice(0, 7);
     return month || "—";
@@ -250,7 +240,7 @@
     return summary;
   }
 
-  function filteredBets() {
+  function filteredBets({ ignoreDates = false } = {}) {
     const query = state.market.trim().toLowerCase();
     return state.data.bets.filter((bet) => {
       if (state.book && bet.book !== state.book) return false;
@@ -259,12 +249,18 @@
         const haystack = `${bet.market} ${bet.bet} ${bet.selection} ${bet.matchup}`.toLowerCase();
         if (!haystack.includes(query)) return false;
       }
-      const day = dayOf(bet);
-      if (state.from && day && day < state.from) return false;
-      if (state.to && day && day > state.to) return false;
+      if (!ignoreDates) {
+        const day = dayOf(bet);
+        if (state.from && day && day < state.from) return false;
+        if (state.to && day && day > state.to) return false;
+      }
       if (state.settled && !isSettled(bet)) return false;
       return true;
     });
+  }
+
+  function chartBets() {
+    return filteredBets({ ignoreDates: true });
   }
 
   function el(tag, className, text) {
@@ -347,6 +343,80 @@
     });
   }
 
+  function chartDay(point) {
+    return String(point?.at || "").slice(0, 10);
+  }
+
+  function selectionIndexes(points) {
+    if (!points.length) return null;
+    if (state.chartBrush) {
+      return [
+        Math.min(state.chartBrush.anchor, state.chartBrush.current),
+        Math.max(state.chartBrush.anchor, state.chartBrush.current),
+      ];
+    }
+    if (!state.from && !state.to) return null;
+    let start = 0;
+    let end = points.length - 1;
+    if (state.from) {
+      const index = points.findIndex((point) => chartDay(point) >= state.from);
+      if (index === -1) return null;
+      start = index;
+    }
+    if (state.to) {
+      let found = -1;
+      for (let index = points.length - 1; index >= 0; index -= 1) {
+        if (chartDay(points[index]) <= state.to) {
+          found = index;
+          break;
+        }
+      }
+      if (found === -1) return null;
+      end = found;
+    }
+    if (start > end) return null;
+    return [start, end];
+  }
+
+  function drawRangeBand(ctx, points, start, end, height, pad) {
+    const left = points[start].x;
+    const right = points[end].x;
+    const top = pad.top;
+    const bottom = height - pad.bottom;
+    const width = Math.max(2, right - left);
+    ctx.save();
+    ctx.fillStyle = "rgba(228, 195, 106, 0.14)";
+    ctx.fillRect(left, top, width, bottom - top);
+    ctx.strokeStyle = "rgba(228, 195, 106, 0.65)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(left, top);
+    ctx.lineTo(left, bottom);
+    ctx.moveTo(right, top);
+    ctx.lineTo(right, bottom);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function nearestChartIndex(clientX) {
+    const rect = els.canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    let nearestIndex = 0;
+    let best = Math.abs(state.chartPoints[0].x - x);
+    state.chartPoints.forEach((point, index) => {
+      const distance = Math.abs(point.x - x);
+      if (distance < best) {
+        nearestIndex = index;
+        best = distance;
+      }
+    });
+    return nearestIndex;
+  }
+
+  function redrawChart() {
+    if (state.data) drawChart(chartBets());
+  }
+
   function drawChart(bets) {
     const canvas = els.canvas;
     const width = canvas.clientWidth || 600;
@@ -357,6 +427,7 @@
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
+    canvas.classList.toggle("is-brushing", Boolean(state.chartBrush));
 
     const points = seriesOf(bets);
     state.chartPoints = points.map((point, index) => ({
@@ -404,15 +475,19 @@
     ctx.fillText(money(min), pad.left - 8, height - pad.bottom - 2);
     drawXAxis(ctx, points, xAt, height, pad);
 
+    points.forEach((point, index) => {
+      state.chartPoints[index].x = xAt(index);
+      state.chartPoints[index].y = yAt(point.profit);
+    });
+
+    const selected = selectionIndexes(state.chartPoints);
+    if (selected) drawRangeBand(ctx, state.chartPoints, selected[0], selected[1], height, pad);
+
     const end = points[points.length - 1].profit;
     ctx.beginPath();
-    points.forEach((point, index) => {
-      const x = xAt(index);
-      const y = yAt(point.profit);
-      state.chartPoints[index].x = x;
-      state.chartPoints[index].y = y;
-      if (index === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+    state.chartPoints.forEach((point, index) => {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
     });
     ctx.strokeStyle = end >= 0 ? "#8fce78" : "#ef8b72";
     ctx.lineWidth = 2;
@@ -424,12 +499,22 @@
     ctx.arc(last.x, last.y, 3.5, 0, Math.PI * 2);
     ctx.fill();
 
+    if (state.chartBrush && selected) {
+      const [start, stop] = selected;
+      els.readout.textContent = `${formatDay(points[start].at)} – ${formatDay(points[stop].at)}`;
+      return;
+    }
+
     const hover = state.hoverIndex == null ? null : state.chartPoints[state.hoverIndex];
     if (hover) {
       drawHoverGuide(ctx, hover, width, height, pad);
       els.readout.textContent = `${formatDay(hover.at)} · ${money(hover.profit)} cumulative`;
+    } else if (state.from || state.to) {
+      const startLabel = state.from ? formatDay(state.from) : formatDay(points[0].at);
+      const endLabel = state.to ? formatDay(state.to) : formatDay(points[points.length - 1].at);
+      els.readout.textContent = `${startLabel} – ${endLabel} selected · drag to change`;
     } else {
-      els.readout.textContent = `${formatDay(points[0].at)} – ${formatDay(points[points.length - 1].at)} · ${money(end)}`;
+      els.readout.textContent = `${formatDay(points[0].at)} – ${formatDay(points[points.length - 1].at)} · ${money(end)} · drag to select`;
     }
   }
 
@@ -509,21 +594,59 @@
   }
 
   function onChartMove(event) {
-    if (!state.chartPoints.length || !state.data) return;
-    const rect = els.canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    let nearestIndex = 0;
-    let best = Math.abs(state.chartPoints[0].x - x);
-    state.chartPoints.forEach((point, index) => {
-      const distance = Math.abs(point.x - x);
-      if (distance < best) {
-        nearestIndex = index;
-        best = distance;
-      }
-    });
+    if (!state.chartPoints.length || !state.data || state.chartBrush) return;
+    const nearestIndex = nearestChartIndex(event.clientX);
     if (state.hoverIndex === nearestIndex) return;
     state.hoverIndex = nearestIndex;
-    drawChart(filteredBets());
+    redrawChart();
+  }
+
+  function onChartPointerDown(event) {
+    if (event.button != null && event.button !== 0) return;
+    if (!state.chartPoints.length || !state.data) return;
+    event.preventDefault();
+    const index = nearestChartIndex(event.clientX);
+    state.chartBrush = { anchor: index, current: index };
+    state.hoverIndex = null;
+    els.canvas.setPointerCapture(event.pointerId);
+    redrawChart();
+  }
+
+  function onChartPointerMove(event) {
+    if (state.chartBrush) {
+      if (!state.chartPoints.length) return;
+      const index = nearestChartIndex(event.clientX);
+      if (state.chartBrush.current === index) return;
+      state.chartBrush.current = index;
+      redrawChart();
+      return;
+    }
+    onChartMove(event);
+  }
+
+  function onChartPointerUp(event) {
+    if (!state.chartBrush || !state.chartPoints.length) {
+      state.chartBrush = null;
+      return;
+    }
+    const start = Math.min(state.chartBrush.anchor, state.chartBrush.current);
+    const end = Math.max(state.chartBrush.anchor, state.chartBrush.current);
+    state.chartBrush = null;
+    if (els.canvas.hasPointerCapture?.(event.pointerId)) {
+      els.canvas.releasePointerCapture(event.pointerId);
+    }
+    state.from = chartDay(state.chartPoints[start]);
+    state.to = chartDay(state.chartPoints[end]);
+    els.from.value = state.from;
+    els.to.value = state.to;
+    state.betLimit = PAGE;
+    render();
+  }
+
+  function onChartPointerCancel() {
+    if (!state.chartBrush) return;
+    state.chartBrush = null;
+    redrawChart();
   }
 
   function groupRows(bets, keyFn) {
@@ -809,8 +932,7 @@
     state.book = params.get("book") || "";
     state.league = params.get("league") || "";
     state.market = params.get("market") || "";
-    const hasDateRange = params.has("from") || params.has("to");
-    state.from = hasDateRange ? params.get("from") || "" : isoDaysAgo(DEFAULT_RANGE_DAYS);
+    state.from = params.get("from") || "";
     state.to = params.get("to") || "";
     state.settled = params.get("settled") === "1";
     state.view = viewFromHash();
@@ -822,8 +944,7 @@
     if (state.book) params.set("book", state.book);
     if (state.league) params.set("league", state.league);
     if (state.market) params.set("market", state.market);
-    // Persist empty from after Clear so reload does not re-default to 30 days.
-    params.set("from", state.from);
+    if (state.from) params.set("from", state.from);
     if (state.to) params.set("to", state.to);
     if (state.settled) params.set("settled", "1");
     const query = params.toString();
@@ -840,7 +961,7 @@
     const summary = summarize(bets);
     renderBooks(booksIn(state.data.bets));
     renderKpis(summary);
-    drawChart(bets);
+    drawChart(chartBets());
     syncBetsStatus();
     renderTable(bets);
     for (const tab of els.views.querySelectorAll("[data-view]")) {
@@ -989,15 +1110,16 @@
     state.betLimit = PAGE;
     render();
   });
-  els.canvas.addEventListener("mousemove", onChartMove);
-  els.canvas.addEventListener("mouseleave", () => {
-    if (state.hoverIndex == null) return;
+  els.canvas.addEventListener("pointerdown", onChartPointerDown);
+  els.canvas.addEventListener("pointermove", onChartPointerMove);
+  els.canvas.addEventListener("pointerup", onChartPointerUp);
+  els.canvas.addEventListener("pointercancel", onChartPointerCancel);
+  els.canvas.addEventListener("pointerleave", () => {
+    if (state.chartBrush || state.hoverIndex == null) return;
     state.hoverIndex = null;
-    if (state.data) drawChart(filteredBets());
+    redrawChart();
   });
-  window.addEventListener("resize", () => {
-    if (state.data) drawChart(filteredBets());
-  });
+  window.addEventListener("resize", redrawChart);
 
   els.tableRoot.addEventListener("mouseover", (event) => {
     const target = oddsHoverTarget(event);

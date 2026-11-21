@@ -270,6 +270,11 @@ canvas {
   width: 100%;
   height: 240px;
   cursor: crosshair;
+  touch-action: none;
+}
+
+canvas.is-brushing {
+  cursor: col-resize;
 }
 
 .table-wrap { overflow-x: auto; }
