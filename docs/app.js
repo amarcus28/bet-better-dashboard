@@ -426,14 +426,26 @@
     return time ? `${day} ${time[1]}:${time[2]}` : day;
   }
 
+  const stampFormat = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+    timeZoneName: "short",
+  });
+
   function formatStamp(iso) {
     const text = String(iso || "");
-    const time = text.match(/T(\d{2}):(\d{2})(?::(\d{2}))?/);
-    if (!time) return "";
-    const seconds = time[3] ? `:${time[3]}` : "";
-    const offset = text.match(/([+-]\d{2}:\d{2}|Z)$/);
-    const zone = !offset || offset[1] === "Z" || offset[1] === "+00:00" || offset[1] === "-00:00" ? " UTC" : ` ${offset[1]}`;
-    return `${formatDay(text)} ${time[1]}:${time[2]}${seconds}${zone}`;
+    if (!/T\d{2}:\d{2}/.test(text)) return "";
+    const date = new Date(text);
+    if (Number.isNaN(date.getTime())) return "";
+    const parts = stampFormat.formatToParts(date);
+    const get = (type) => parts.find((part) => part.type === type)?.value || "";
+    return `${get("day")} ${get("month")} ${get("year")} ${get("hour")}:${get("minute")}:${get("second")} ${get("timeZoneName")}`;
   }
 
   function formatMonth(key) {
