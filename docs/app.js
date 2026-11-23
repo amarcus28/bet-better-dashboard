@@ -367,7 +367,7 @@
   function oddsWarnIcon() {
     const icon = el("span", "odds-warn");
     icon.setAttribute("aria-hidden", "true");
-    icon.innerHTML = "<svg viewBox='0 0 16 16' width='14' height='14'><path fill='currentColor' d='M8 1.4 15.2 14.6H.8L8 1.4z'/><path fill='#101410' d='M7.25 6.1h1.5v4.2h-1.5zm0 5.1h1.5v1.5h-1.5z'/></svg>";
+    icon.innerHTML = "<svg viewBox='0 0 16 16' width='14' height='14'><path fill='currentColor' d='M8 1.4 15.2 14.6H.8L8 1.4z'/><path fill='var(--panel)' d='M7.25 6.1h1.5v4.2h-1.5zm0 5.1h1.5v1.5h-1.5z'/></svg>";
     return icon;
   }
 
@@ -615,9 +615,9 @@
     const bottom = height - pad.bottom;
     const width = Math.max(2, right - left);
     ctx.save();
-    ctx.fillStyle = "rgba(228, 195, 106, 0.14)";
+    ctx.fillStyle = "rgba(154, 116, 32, 0.14)";
     ctx.fillRect(left, top, width, bottom - top);
-    ctx.strokeStyle = "rgba(228, 195, 106, 0.65)";
+    ctx.strokeStyle = "rgba(154, 116, 32, 0.65)";
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(left, top);
@@ -689,14 +689,14 @@
     };
     const yAt = (value) => pad.top + ((max - value) / (max - min)) * (height - pad.top - pad.bottom);
 
-    ctx.strokeStyle = "#2c352e";
+    ctx.strokeStyle = "#e2dcd0";
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(pad.left, yAt(0));
     ctx.lineTo(width - pad.right, yAt(0));
     ctx.stroke();
 
-    ctx.fillStyle = "#9aa394";
+    ctx.fillStyle = "#5c665e";
     ctx.font = "12px IBM Plex Mono, ui-monospace, monospace";
     ctx.textAlign = "right";
     ctx.textBaseline = "top";
@@ -719,7 +719,7 @@
       if (index === 0) ctx.moveTo(point.x, point.y);
       else ctx.lineTo(point.x, point.y);
     });
-    ctx.strokeStyle = end >= 0 ? "#8fce78" : "#ef8b72";
+    ctx.strokeStyle = end >= 0 ? "#2d7a3f" : "#c44b38";
     ctx.lineWidth = 2;
     ctx.stroke();
 
@@ -746,19 +746,19 @@
   function drawHoverGuide(ctx, point, width, height, pad) {
     const axisY = height - pad.bottom;
     ctx.save();
-    ctx.strokeStyle = "rgba(228, 195, 106, 0.9)";
+    ctx.strokeStyle = "rgba(154, 116, 32, 0.9)";
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(point.x, pad.top);
     ctx.lineTo(point.x, axisY);
     ctx.stroke();
 
-    ctx.fillStyle = "#e4c36a";
+    ctx.fillStyle = "#9a7420";
     ctx.beginPath();
     ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
     ctx.fill();
     ctx.lineWidth = 2;
-    ctx.strokeStyle = "#101410";
+    ctx.strokeStyle = "#ffffff";
     ctx.stroke();
 
     const label = formatWhen(point.at);
@@ -767,14 +767,14 @@
     const boxH = 18;
     const boxX = Math.max(4, Math.min(width - boxW - 4, point.x - boxW / 2));
     const boxY = axisY + 6;
-    ctx.fillStyle = "#101410";
+    ctx.fillStyle = "#ffffff";
     ctx.beginPath();
     ctx.roundRect(boxX, boxY, boxW, boxH, 4);
     ctx.fill();
-    ctx.strokeStyle = "#e4c36a";
+    ctx.strokeStyle = "#9a7420";
     ctx.lineWidth = 1;
     ctx.stroke();
-    ctx.fillStyle = "#e4c36a";
+    ctx.fillStyle = "#9a7420";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillText(label, boxX + 6, boxY + boxH / 2);
@@ -797,11 +797,11 @@
       const index = points.length === 1 ? 0 : Math.round(slot * (points.length - 1) / (slots - 1));
       if (indexes[indexes.length - 1] !== index) indexes.push(index);
     }
-    ctx.fillStyle = "#9aa394";
+    ctx.fillStyle = "#5c665e";
     ctx.font = "11px IBM Plex Mono, ui-monospace, monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.strokeStyle = "#2c352e";
+    ctx.strokeStyle = "#e2dcd0";
     ctx.lineWidth = 1;
     let lastX = -Infinity;
     indexes.forEach((index, position) => {

@@ -1,16 +1,17 @@
 :root {
-  --bg: #101410;
-  --panel: #181d19;
-  --panel-2: #1e2520;
-  --line: #2c352e;
-  --text: #e7ecdf;
-  --muted: #9aa394;
-  --faint: #6d776f;
-  --pos: #8fce78;
-  --neg: #ef8b72;
-  --accent: #e4c36a;
-  --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
-  color-scheme: dark;
+  --bg: #f6f4ee;
+  --panel: #ffffff;
+  --panel-2: #f0ece4;
+  --line: #e2dcd0;
+  --text: #1c221d;
+  --muted: #5c665e;
+  --faint: #7a847c;
+  --pos: #2d7a3f;
+  --neg: #c44b38;
+  --accent: #9a7420;
+  --on-accent: #fffaf2;
+  --shadow: 0 1px 2px rgba(28, 34, 29, 0.05);
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -20,7 +21,7 @@ html, body { margin: 0; padding: 0; }
 body {
   min-height: 100vh;
   background:
-    radial-gradient(900px 420px at 0% -10%, rgba(228, 195, 106, 0.09), transparent 55%),
+    radial-gradient(900px 420px at 0% -10%, rgba(154, 116, 32, 0.1), transparent 55%),
     var(--bg);
   color: var(--text);
   font-family: "Source Sans 3", "Segoe UI", sans-serif;
@@ -63,10 +64,10 @@ h2 { margin: 0; font-size: 26px; }
 .banner {
   margin: 0 0 16px;
   padding: 12px 14px;
-  border: 1px solid #6d3a32;
+  border: 1px solid #e7b8ae;
   border-radius: 10px;
-  background: #2a1816;
-  color: #f0c2b6;
+  background: #fdf3f0;
+  color: #8d3426;
 }
 
 .filters, .panel {
@@ -137,7 +138,7 @@ input[type="search"] { width: 100%; }
 .books button[aria-pressed="true"], .views a[aria-selected="true"] {
   background: var(--accent);
   border-color: var(--accent);
-  color: #1a1608;
+  color: var(--on-accent);
   font-weight: 700;
 }
 
@@ -253,7 +254,7 @@ input[type="search"] { width: 100%; }
 
 .bets-status input:checked::after {
   transform: translateX(16px);
-  background: #1a1608;
+  background: var(--on-accent);
 }
 
 .bets-status input:focus-visible {
@@ -380,7 +381,7 @@ tr.total td {
   padding: 4px 8px;
   border: 1px solid var(--accent);
   border-radius: 6px;
-  background: #101410;
+  background: var(--panel);
   color: var(--accent);
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 12px;
