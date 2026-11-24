@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Missed bets · Bet Better Dashboard</title>
+    <meta
+      name="description"
+      content="Wagers the bot skipped: counts and recommended stake by reason and book, and the delay when the price was no longer better."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:opsz,wght@8..60,560;8..60,680&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css?v=19" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f6f4ee'/%3E%3Cg fill='%239a7420' fill-rule='evenodd'%3E%3Cpath transform='translate(2.83 9)' d='M0 14V0h3.3c2.5 0 4 1.35 4 3.35 0 1.45-.85 2.55-2.15 3.05 1.55.45 2.5 1.6 2.5 3.2C7.65 12.2 6.05 14 3.45 14H0zm2.15-8.15h1.2c1.15 0 1.8-.55 1.8-1.4S4.5 3 3.35 3h-1.2zm0 6.15h1.35c1.25 0 1.95-.6 1.95-1.55S4.75 9 3.5 9H2.15z'/%3E%3Cpath transform='translate(12.18 9)' d='M0 14V0h3.3c2.5 0 4 1.35 4 3.35 0 1.45-.85 2.55-2.15 3.05 1.55.45 2.5 1.6 2.5 3.2C7.65 12.2 6.05 14 3.45 14H0zm2.15-8.15h1.2c1.15 0 1.8-.55 1.8-1.4S4.5 3 3.35 3h-1.2zm0 6.15h1.35c1.25 0 1.95-.6 1.95-1.55S4.75 9 3.5 9H2.15z'/%3E%3Cpath transform='translate(21.53 9)' d='M0 14V0h3.3c2.5 0 4 1.35 4 3.35 0 1.45-.85 2.55-2.15 3.05 1.55.45 2.5 1.6 2.5 3.2C7.65 12.2 6.05 14 3.45 14H0zm2.15-8.15h1.2c1.15 0 1.8-.55 1.8-1.4S4.5 3 3.35 3h-1.2zm0 6.15h1.35c1.25 0 1.95-.6 1.95-1.55S4.75 9 3.5 9H2.15z'/%3E%3C/g%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <div class="page">
+      <header class="top">
+        <div class="title-block">
+          <h1>Bet Better Dashboard</h1>
+          <nav class="views page-nav" aria-label="Sections">
+            <a href="./index.html">Results</a>
+            <a href="./missed.html" aria-current="page">Missed bets</a>
+          </nav>
+        </div>
+        <p class="snapshot" id="snapshot">Loading missed bets…</p>
+      </header>
+
+      <p class="banner" id="banner" hidden></p>
+      <p class="miss-note" id="note">Loading skipped wagers…</p>
+
+      <section class="filters" id="filters" hidden aria-label="Filter missed bets">
+        <div class="books" id="books"></div>
+        <div class="views scope-row" id="scope" role="tablist" aria-label="Which skips to include">
+          <button type="button" role="tab" data-scope="edge" aria-selected="true">Missed edge</button>
+          <button type="button" role="tab" data-scope="intentional" aria-selected="false">Intentional skips</button>
+        </div>
+        <div class="filter-row">
+          <label class="grow">
+            Market
+            <input id="market" type="search" placeholder="Moneyline, points, spread…" autocomplete="off" />
+          </label>
+          <label>
+            From
+            <input id="from" type="date" />
+          </label>
+          <label>
+            To
+            <input id="to" type="date" />
+          </label>
+          <button type="button" class="text-button" id="clear">Clear</button>
+        </div>
+      </section>
+
+      <section class="kpis fluid" id="kpis" hidden aria-label="Missed bet totals"></section>
+
+      <section class="panel" id="reason-panel" hidden>
+        <div class="panel-head">
+          <h2>By reason</h2>
+          <div class="panel-head-end">
+            <button type="button" class="text-button" id="clear-reason" hidden>Clear reason</button>
+            <p class="readout" id="reason-meta"></p>
+          </div>
+        </div>
+        <div id="reason-root"></div>
+      </section>
+
+      <section class="panel" id="odds-panel" hidden>
+        <div class="panel-head">
+          <h2>Odds not better</h2>
+          <p class="readout" id="odds-meta"></p>
+        </div>
+        <p class="miss-note" id="odds-note">
+          The book's price was worse than Discord when the bot tried. Shorter is the book's implied
+          probability minus Discord's, in percentage points. Median delay and median shorter are weighted
+          by recommended stake. Higher American odds are better for the bettor.
+        </p>
+        <div id="odds-root"></div>
+      </section>
+
+      <section class="panel" id="log" hidden>
+        <div class="panel-head">
+          <h2>Skips</h2>
+          <p class="readout" id="log-meta"></p>
+        </div>
+        <div id="log-root"></div>
+      </section>
+
+      <section class="panel" id="empty" hidden>
+        <h2 id="empty-title">Missed bets</h2>
+        <p class="muted" id="empty-copy"></p>
+      </section>
+
+      <footer class="foot">
+        <p>
+          Skip decisions from Supabase, published from
+          <a href="https://github.com/amarcus28/bet-better-dashboard">amarcus28/bet-better-dashboard</a>.
+          Placed bets stay on <a href="./index.html">Results</a>. Order ids stay out of this page.
+        </p>
+      </footer>
+    </div>
+    <script src="./missed.js?v=3"></script>
+  </body>
+</html>
