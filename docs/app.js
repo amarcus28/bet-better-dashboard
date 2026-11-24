@@ -393,12 +393,12 @@
   }
 
   function dayOf(bet) {
-    return String(bet.placed_at || "").slice(0, 10);
+    return easternDayKey(bet.placed_at);
   }
 
   function monthOf(bet) {
-    const month = String(bet.placed_at || "").slice(0, 7);
-    return month || "—";
+    const day = easternDayKey(bet.placed_at);
+    return day.length >= 7 ? day.slice(0, 7) : "—";
   }
 
   const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -412,20 +412,6 @@
     return { year: match[1], index };
   }
 
-  function formatDay(iso) {
-    if (!iso) return "—";
-    const parts = monthParts(iso);
-    const day = Number(String(iso).slice(8, 10));
-    if (!parts || !day) return iso;
-    return `${day} ${MONTHS_SHORT[parts.index]} ${parts.year}`;
-  }
-
-  function formatWhen(iso) {
-    const day = formatDay(iso);
-    const time = String(iso || "").match(/T(\d{2}):(\d{2})/);
-    return time ? `${day} ${time[1]}:${time[2]}` : day;
-  }
-
   const stampFormat = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
     day: "numeric",
@@ -437,15 +423,70 @@
     hourCycle: "h23",
     timeZoneName: "short",
   });
+  const easternDayFormat = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
 
-  function formatStamp(iso) {
+  function easternParts(iso) {
     const text = String(iso || "");
-    if (!/T\d{2}:\d{2}/.test(text)) return "";
+    if (!/T\d{2}:\d{2}/.test(text)) return null;
     const date = new Date(text);
-    if (Number.isNaN(date.getTime())) return "";
+    if (Number.isNaN(date.getTime())) return null;
     const parts = stampFormat.formatToParts(date);
     const get = (type) => parts.find((part) => part.type === type)?.value || "";
-    return `${get("day")} ${get("month")} ${get("year")} ${get("hour")}:${get("minute")}:${get("second")} ${get("timeZoneName")}`;
+    const day = get("day");
+    const month = get("month");
+    const year = get("year");
+    if (!day || !month || !year) return null;
+    return {
+      day,
+      month,
+      year,
+      hour: get("hour"),
+      minute: get("minute"),
+      second: get("second"),
+      zone: get("timeZoneName"),
+    };
+  }
+
+  function easternDayKey(iso) {
+    const text = String(iso || "");
+    const fallback = text.slice(0, 10);
+    if (!/T\d{2}:\d{2}/.test(text)) return fallback;
+    const date = new Date(text);
+    if (Number.isNaN(date.getTime())) return fallback;
+    const parts = easternDayFormat.formatToParts(date);
+    const get = (type) => parts.find((part) => part.type === type)?.value || "";
+    const year = get("year");
+    const month = get("month");
+    const day = get("day");
+    if (!year || !month || !day) return fallback;
+    return `${year}-${month}-${day}`;
+  }
+
+  function formatDay(iso) {
+    if (!iso) return "—";
+    const eastern = easternParts(iso);
+    if (eastern) return `${Number(eastern.day)} ${eastern.month} ${eastern.year}`;
+    const parts = monthParts(iso);
+    const day = Number(String(iso).slice(8, 10));
+    if (!parts || !day) return String(iso);
+    return `${day} ${MONTHS_SHORT[parts.index]} ${parts.year}`;
+  }
+
+  function formatWhen(iso) {
+    const eastern = easternParts(iso);
+    if (eastern) return `${Number(eastern.day)} ${eastern.month} ${eastern.year} ${eastern.hour}:${eastern.minute}`;
+    return formatDay(iso);
+  }
+
+  function formatStamp(iso) {
+    const eastern = easternParts(iso);
+    if (!eastern || !eastern.hour) return "";
+    return `${eastern.day} ${eastern.month} ${eastern.year} ${eastern.hour}:${eastern.minute}:${eastern.second} ${eastern.zone}`;
   }
 
   function formatMonth(key) {
@@ -782,6 +823,11 @@
   }
 
   function axisDate(iso, withYear) {
+    const eastern = easternParts(iso);
+    if (eastern) {
+      const stem = `${eastern.month} ${Number(eastern.day)}`;
+      return withYear ? `${stem}, ${eastern.year}` : stem;
+    }
     const parts = monthParts(iso);
     if (!parts) return "";
     const day = Number(String(iso).slice(8, 10)) || 1;
