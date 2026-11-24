@@ -587,7 +587,6 @@
     const cell = el("td", "wrap");
     cell.title = info.blurb;
     cell.append(document.createTextNode(info.label));
-    cell.append(el("span", "subline muted", row.reason || "unknown"));
     if (row.detail) cell.append(el("span", "subline", row.detail));
     return cell;
   }
